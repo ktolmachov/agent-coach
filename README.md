@@ -3,7 +3,7 @@
 Agent Coach is a standalone deterministic diploma demo repository. It now
 contains the public repository foundation, exported versioned contract
 artifacts, a framework-independent Agent Core and offline deterministic mock
-adapters for review.
+adapters, and a local Mock Agent API for review.
 
 Implemented so far:
 
@@ -22,9 +22,10 @@ Implemented so far:
 - mock adapter tests for advertised schemas, controlled outcomes, security
   fixtures and deterministic repeatability.
 - package data resources for wheel-installed offline mock runs.
+- localhost-only FastAPI Mock Agent API with OpenAPI and Swagger UI.
 
-The local Mock Agent API is planned for a later slice. No API server, network
-listener, production auth, durable state or production data is implemented.
+The Mock API is a deterministic local review surface. It has no production
+auth, no production data and no durable production state.
 
 ## Install
 
@@ -32,6 +33,16 @@ listener, production auth, durable state or production data is implemented.
 python -m pip install -e .
 python -c "import agent_coach; print(agent_coach.__version__)"
 ```
+
+Run the local Mock API:
+
+```bash
+python -m pip install -e ".[dev]"
+agent-coach-api
+```
+
+By default the server binds to `127.0.0.1:8008`; non-loopback bind addresses
+are rejected. Swagger UI is available at `http://127.0.0.1:8008/docs`.
 
 ## Development Checks
 
@@ -41,6 +52,7 @@ python -m pytest
 python -m ruff check .
 python -m compileall src
 python scripts/check_contract_export.py
+python scripts/check_openapi_snapshot.py
 ```
 
 Run one deterministic offline mock scenario from Python:
@@ -49,8 +61,8 @@ Run one deterministic offline mock scenario from Python:
 python -c "from agent_coach.mock import build_mock_composition; c = build_mock_composition('grounded_success'); r = c.runner.run(c.request); print(r.answer_status, r.stop_reason.value)"
 ```
 
-The project has no runtime dependencies. Development tools are declared only as
-optional extras.
+The runtime dependencies are limited to the local API layer. Agent Core and mock
+adapter modules remain framework-independent and do not import FastAPI.
 
 ## Contracts
 

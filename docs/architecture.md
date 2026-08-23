@@ -2,16 +2,18 @@
 
 The repository currently contains the public foundation, exported contract
 artifacts, a framework-independent Agent Core and deterministic offline mock
-adapters. The package is importable and runnable in process, but it does not
-contain an API server, network transport, durable state or HomeTutor runtime
-code.
+adapters plus a localhost-only Mock Agent API. The package is importable,
+runnable in process and runnable as a local review API. It does not contain
+production network transport, durable state or HomeTutor runtime code.
 
 The planned architecture is intentionally layered:
 
 ```text
-review tools and later local API
+review tools, Swagger UI and curl
         |
-composition root
+local Mock Agent API
+        |
+API composition root
         |
 framework-independent Agent Core
         |
@@ -29,21 +31,31 @@ adapter, embedded security policy, deterministic clock, ephemeral run store and
 synthetic public fixtures. Mock tools are selected from the frozen read-only D2
 contract bundle and checked against their advertised schemas.
 
+D5 adds a FastAPI layer over that composition. The API owns HTTP schemas,
+idempotency memory, error envelopes, OpenAPI generation, request-size
+enforcement and loopback-only startup validation. Agent Core logic remains
+outside the API layer.
+
 Future production use is outside this repository's current authority. A later
 architecture decision would be required before replacing the diploma mock
 adapters with network, durable-state or authenticated adapters.
 
 ## Current Boundaries
 
-- The package has zero runtime dependencies.
+- Runtime dependencies are limited to the local API layer.
 - Core modules live under `src/agent_coach/core/` and depend only on the Python
   standard library plus package-owned modules.
 - Mock modules live under `src/agent_coach/mock/` and depend only on the core,
   the Python standard library and package-owned synthetic fixtures.
+- API modules live under `src/agent_coach/api/` and compose the core/mock
+  runtime through package APIs.
 - The core exposes explicit ports for planning, message building, security,
   tool execution, usage accounting, clock and run storage.
-- No network listener is implemented.
+- The only server entry point defaults to `127.0.0.1:8008` and rejects
+  non-loopback bind addresses.
 - No write-enabled tool is advertised by the deterministic mock composition.
+- The API exposes no production authentication simulation and keeps run state
+  in process-local memory only.
 - No private HomeTutor checkout is needed to install, import or validate the
   exported contracts.
 - Public documentation is sanitized and self-contained.

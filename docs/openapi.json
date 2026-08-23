@@ -1,0 +1,812 @@
+{
+  "components": {
+    "schemas": {
+      "AgentResultResponse": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "answer_status": {
+            "title": "Answer Status",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/AgentStepResponse"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "stop_reason": {
+            "title": "Stop Reason",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "trace": {
+            "additionalProperties": true,
+            "title": "Trace",
+            "type": "object"
+          }
+        },
+        "required": [
+          "answer",
+          "answer_status",
+          "success",
+          "stop_reason",
+          "sources",
+          "trace",
+          "steps"
+        ],
+        "title": "AgentResultResponse",
+        "type": "object"
+      },
+      "AgentStepResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "step_index": {
+            "title": "Step Index",
+            "type": "integer"
+          },
+          "tool_args": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Args"
+          },
+          "tool_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Error"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "tool_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Ok"
+          }
+        },
+        "required": [
+          "step_index",
+          "state"
+        ],
+        "title": "AgentStepResponse",
+        "type": "object"
+      },
+      "ApiRunState": {
+        "description": "Future-shaped public run lifecycle.",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "ApiRunState",
+        "type": "string"
+      },
+      "ContractResponse": {
+        "properties": {
+          "advertised_read_only_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Advertised Read Only Tools",
+            "type": "array"
+          },
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "contract_schema_hash": {
+            "title": "Contract Schema Hash",
+            "type": "string"
+          },
+          "contract_schema_version": {
+            "title": "Contract Schema Version",
+            "type": "string"
+          },
+          "contracts": {
+            "additionalProperties": true,
+            "title": "Contracts",
+            "type": "object"
+          },
+          "controlled_outcomes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Controlled Outcomes",
+            "type": "array"
+          },
+          "fixture_schema_version": {
+            "title": "Fixture Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_version",
+          "contract_schema_version",
+          "contract_schema_hash",
+          "fixture_schema_version",
+          "advertised_read_only_tools",
+          "controlled_outcomes",
+          "contracts"
+        ],
+        "title": "ContractResponse",
+        "type": "object"
+      },
+      "ErrorEnvelope": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorEnvelope",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorEnvelope"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "auth": {
+            "const": "none",
+            "title": "Auth",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "production_auth": {
+            "const": false,
+            "title": "Production Auth",
+            "type": "boolean"
+          },
+          "state_store": {
+            "const": "ephemeral_in_memory",
+            "title": "State Store",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "api_version",
+          "auth",
+          "production_auth",
+          "state_store"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "RunAcceptedResponse": {
+        "properties": {
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "ephemeral": {
+            "const": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "idempotency_key_id": {
+            "title": "Idempotency Key Id",
+            "type": "string"
+          },
+          "polling_url": {
+            "title": "Polling Url",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ApiRunState"
+          }
+        },
+        "required": [
+          "api_version",
+          "run_id",
+          "state",
+          "idempotency_key_id",
+          "polling_url",
+          "ephemeral"
+        ],
+        "title": "RunAcceptedResponse",
+        "type": "object"
+      },
+      "RunCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "result_limit_chars": {
+            "default": 16000,
+            "maximum": 32000.0,
+            "minimum": 1000.0,
+            "title": "Result Limit Chars",
+            "type": "integer"
+          },
+          "scenario_id": {
+            "default": "grounded_success",
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_:-]+$",
+            "title": "Scenario Id",
+            "type": "string"
+          }
+        },
+        "title": "RunCreateRequest",
+        "type": "object"
+      },
+      "RunStatusResponse": {
+        "properties": {
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentResultResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scenario_id": {
+            "title": "Scenario Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ApiRunState"
+          }
+        },
+        "required": [
+          "api_version",
+          "run_id",
+          "state",
+          "scenario_id"
+        ],
+        "title": "RunStatusResponse",
+        "type": "object"
+      },
+      "ToolCallRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "additionalProperties": true,
+            "title": "Args",
+            "type": "object"
+          },
+          "result_limit_chars": {
+            "default": 16000,
+            "maximum": 32000.0,
+            "minimum": 1000.0,
+            "title": "Result Limit Chars",
+            "type": "integer"
+          },
+          "scenario_id": {
+            "default": "grounded_success",
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_:-]+$",
+            "title": "Scenario Id",
+            "type": "string"
+          }
+        },
+        "title": "ToolCallRequest",
+        "type": "object"
+      },
+      "ToolCallResponse": {
+        "properties": {
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "title": "Meta",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_version",
+          "tool_name",
+          "ok",
+          "meta"
+        ],
+        "title": "ToolCallResponse",
+        "type": "object"
+      },
+      "ToolListResponse": {
+        "properties": {
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "api_version",
+          "tools"
+        ],
+        "title": "ToolListResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "summary": "Deterministic localhost-only diploma review API.",
+    "title": "Agent Coach Local Mock API",
+    "version": "agent-coach-api/1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Healthz",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Readyz",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/v1/demo/contracts": {
+      "get": {
+        "operationId": "get_contracts_v1_demo_contracts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Contracts",
+        "tags": [
+          "demo"
+        ]
+      }
+    },
+    "/v1/demo/tools": {
+      "get": {
+        "operationId": "list_tools_v1_demo_tools_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List Tools",
+        "tags": [
+          "demo"
+        ]
+      }
+    },
+    "/v1/demo/tools/{tool_name}/call": {
+      "post": {
+        "operationId": "call_tool_v1_demo_tools__tool_name__call_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_name",
+            "required": true,
+            "schema": {
+              "title": "Tool Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolCallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolCallResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Call Tool",
+        "tags": [
+          "demo"
+        ]
+      }
+    },
+    "/v1/runs": {
+      "post": {
+        "operationId": "create_run_v1_runs_post",
+        "parameters": [
+          {
+            "description": "Optional deterministic demo idempotency key.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional deterministic demo idempotency key.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Create Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run_id}": {
+      "get": {
+        "operationId": "get_run_v1_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Get Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    }
+  }
+}

@@ -17,3 +17,8 @@
   adapter/security/golden tests.
 - Packaged mock fixture and contract resources for wheel-installed offline
   runs.
+- Localhost-only FastAPI Mock Agent API with health, readiness, run polling,
+  demo contract/tool endpoints, OpenAPI snapshot and Swagger UI.
+- D5 API hardening for actual-body payload limits, loopback-only startup,
+  strict request schemas, non-reflected idempotency keys and atomic
+  idempotency conflicts.

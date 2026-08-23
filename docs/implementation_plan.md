@@ -251,6 +251,8 @@ Stop:
 
 ## D5 - Local Mock Agent API
 
+Status: complete.
+
 Inputs:
 
 - D4 deterministic composition;
@@ -263,6 +265,25 @@ Write-set:
 - request and response schemas;
 - API tests, OpenAPI snapshot and local run documentation;
 - startup defaults that bind only to localhost.
+
+Implemented artifacts:
+
+- `src/agent_coach/api/`;
+- `tests/test_api.py`;
+- `docs/openapi.json`;
+- `scripts/check_openapi_snapshot.py`;
+- local API documentation in `README.md`, `docs/api.md` and `docs/demo.md`.
+
+D5 HOLD remediation evidence:
+
+- request-size limits are enforced on the actual ASGI receive stream, including
+  chunked requests without `Content-Length`;
+- startup accepts only `localhost` or loopback IP addresses;
+- request models reject top-level extra fields and publish
+  `additionalProperties: false` in OpenAPI;
+- raw `Idempotency-Key` values are not reflected to clients;
+- idempotency check/commit is atomic for conflicting concurrent requests;
+- documented validation errors use the common `ErrorResponse` envelope.
 
 Non-goals:
 
