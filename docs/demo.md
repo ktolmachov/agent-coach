@@ -9,6 +9,7 @@ python -m pip install -e .
 python -c "import agent_coach; print(agent_coach.__version__)"
 python scripts/check_contract_export.py
 python -c "from agent_coach.mock import build_mock_composition; c = build_mock_composition('grounded_success'); r = c.runner.run(c.request); print(r.answer_status, r.stop_reason.value)"
+python scripts/run_diploma_demo.py
 ```
 
 Run the local Mock API:
@@ -38,3 +39,8 @@ failure, security failure, oversized result, prompt injection and fake secret.
 
 The Mock API stores runs only in process memory and exposes no production auth,
 production data or durable state.
+
+For final review, `scripts/run_diploma_demo.py` emits JSON evidence containing
+the reviewed commit, dirty-worktree flag, mock profile, scenario id, contract
+hash, advertised tools, terminal result projection and limitations. Use
+`docs/review_kit.md` and `docs/release_checklist.md` for the full release gate.

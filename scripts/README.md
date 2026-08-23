@@ -36,3 +36,16 @@ mode also checks exact scenario projection hashes from a frozen independent
 snapshot and runtime private-path forms in code plus runtime-consumed
 JSON/TOML/YAML resources. Python source scanning includes bounded constant
 string concatenations.
+
+D7 adds the public release gate and diploma demonstration script:
+
+```bash
+python scripts/check_public_release.py
+python scripts/run_diploma_demo.py
+python scripts/run_diploma_demo.py --output ../agent-coach-diploma-demo.json
+```
+
+The release gate validates the publishable/runtime surface for private local
+path markers, required review files, README safety language, current OpenAPI,
+internal Markdown links and tracked or dirty generated release artifacts. The
+demo script emits deterministic JSON evidence for one synthetic mock scenario.

@@ -387,6 +387,8 @@ Stop:
 
 ## D7 - Diploma Review Kit and Release
 
+Status: HOLD pending independent promotion review.
+
 Inputs:
 
 - completed D1-D6 artifacts;
@@ -398,6 +400,37 @@ Write-set:
 - reviewer guide, demo evidence, release notes and final checklist;
 - optional tagged release preparation materials;
 - documentation updates for exact commands that work from a fresh clone.
+
+Implemented artifacts:
+
+- `docs/review_kit.md`;
+- `docs/release_checklist.md`;
+- `docs/dependency_notices.md`;
+- `scripts/run_diploma_demo.py`;
+- `scripts/check_public_release.py`;
+- `tests/test_diploma_demo.py`;
+- `tests/test_public_release_gate.py`;
+- D7 documentation updates in `README.md`, `docs/demo.md`,
+  `scripts/README.md`, `SECURITY.md` and `CHANGELOG.md`.
+
+D7 release evidence:
+
+- `scripts/run_diploma_demo.py` emits deterministic JSON evidence with commit,
+  dirty-worktree flag, mock profile, contract hash, advertised tools, terminal
+  result projection and limitations;
+- `scripts/check_public_release.py` validates required review files, README
+  safety wording, concrete private security reporting fallback, private local
+  path markers and high-confidence secret patterns in publishable/runtime
+  files including tests, current OpenAPI, internal Markdown links, release
+  evidence freshness and tracked or dirty generated release artifacts;
+- release tag creation remains gated on explicit maintainer approval.
+
+HOLD remediation status:
+
+- public release gate now fails closed for generic private paths, secret-like
+  credentials, production-readiness claims outside README, missing concrete
+  private security fallback and stale/dirty release evidence;
+- promotion remains pending an independent D7 review on a clean commit.
 
 Non-goals:
 

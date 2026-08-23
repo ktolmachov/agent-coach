@@ -2,18 +2,23 @@
 
 ## Supported Surface
 
-D1 contains documentation, package metadata, CI configuration and an importable
-package stub. It contains no network server, no Agent API, no tools, no model
-provider clients and no data persistence.
+The supported public surface is the standalone deterministic diploma demo:
+documentation, exported public contracts, framework-independent Agent Core,
+deterministic mock adapters and a localhost-only Mock Agent API. It contains no
+production authentication, no production data, no provider clients and no
+durable production persistence.
 
 ## Reporting Issues
 
 Do not report security vulnerabilities in public issues.
 
 Use GitHub Private Vulnerability Reporting or a GitHub Security Advisory when
-it is enabled for this repository. If that private channel is unavailable, use
-the non-public course review channel for this diploma submission and include
-only the minimum details needed to reproduce the issue.
+it is enabled for this repository.
+
+Fallback private security recipient: send the report in the private course LMS
+submission thread addressed to the repository owner `ktolmachov` and the
+diploma review supervisor. Include only the minimum details needed to reproduce
+the issue.
 
 Public issues are appropriate for ordinary defects, documentation questions and
 non-sensitive enhancement requests.
@@ -24,5 +29,7 @@ non-sensitive enhancement requests.
 - no learner data or production HomeTutor data;
 - no HomeTutor runtime imports;
 - no production auth simulation;
-- deterministic offline defaults for future demo code;
-- localhost-only defaults once a local API exists in a later slice.
+- deterministic offline defaults for demo code;
+- localhost-only Mock API defaults;
+- release evidence must identify the reviewed commit and must not be published
+  from a dirty worktree.

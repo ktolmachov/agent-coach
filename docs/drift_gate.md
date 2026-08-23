@@ -43,7 +43,7 @@ fixture scenario ids and frozen scenario ids, and each frozen hash must be a
 64-character lowercase sha256 digest.
 
 The absolute-path scan rejects Windows drive paths with either slash style, UNC
-paths, `file:///` URIs, absolute POSIX paths containing a `hometutor` checkout
+paths, file-URI paths, absolute POSIX paths containing a `hometutor` checkout
 segment under any root, common private POSIX roots, and private paths adjacent
 to public URLs after punctuation while preserving public HTTP(S) URLs. Python
 source scanning also folds bounded constant string concatenations before

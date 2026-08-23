@@ -22,3 +22,5 @@
 - D5 API hardening for actual-body payload limits, loopback-only startup,
   strict request schemas, non-reflected idempotency keys and atomic
   idempotency conflicts.
+- Public D7 review kit, release checklist, public release gate and deterministic
+  diploma demonstration evidence script.

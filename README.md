@@ -23,6 +23,8 @@ Implemented so far:
   fixtures and deterministic repeatability.
 - package data resources for wheel-installed offline mock runs.
 - localhost-only FastAPI Mock Agent API with OpenAPI and Swagger UI.
+- diploma review kit, release checklist, public release gate and deterministic
+  demo evidence script.
 
 The Mock API is a deterministic local review surface. It has no production
 auth, no production data and no durable production state.
@@ -54,12 +56,20 @@ python -m compileall src
 python scripts/check_contract_export.py
 python scripts/check_openapi_snapshot.py
 python scripts/check_drift_gate.py
+python scripts/check_public_release.py
 ```
 
 Run one deterministic offline mock scenario from Python:
 
 ```bash
 python -c "from agent_coach.mock import build_mock_composition; c = build_mock_composition('grounded_success'); r = c.runner.run(c.request); print(r.answer_status, r.stop_reason.value)"
+```
+
+Or run the diploma demonstration script and emit JSON review evidence:
+
+```bash
+python scripts/run_diploma_demo.py
+python scripts/run_diploma_demo.py --output ../agent-coach-diploma-demo.json
 ```
 
 The runtime dependencies are limited to the local API layer. Agent Core and mock
@@ -86,6 +96,9 @@ private source checkout.
 - [Core boundary](docs/core.md)
 - [Mock adapters](docs/mock_adapters.md)
 - [Demo status](docs/demo.md)
+- [Diploma review kit](docs/review_kit.md)
+- [Release checklist](docs/release_checklist.md)
+- [Dependency notices](docs/dependency_notices.md)
 - [Provenance](docs/provenance.md)
 - [Drift gate](docs/drift_gate.md)
 - [Implementation plan](docs/implementation_plan.md)

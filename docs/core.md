@@ -53,7 +53,7 @@ D3 remediation invariants:
   is used when a security policy fallback fails or returns malformed data.
 - Tool-result summaries, final answers, mapping keys, tool names, source labels
   and nested metadata are screened for prompt-injection markers, secrets and
-  private or absolute Windows, POSIX, `file:///` and UNC paths before they reach
+  private or absolute Windows, POSIX, file-URI and UNC paths before they reach
   planner context, result projections or run-store events. HTTP(S) URLs remain
   byte-for-byte public labels, including path, query and fragment components.
 - Terminal tool-call paths record the step before the completed event.
