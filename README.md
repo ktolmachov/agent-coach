@@ -2,7 +2,8 @@
 
 Agent Coach is a standalone deterministic diploma demo repository. It now
 contains the public repository foundation, exported versioned contract
-artifacts and a framework-independent Agent Core for offline review.
+artifacts, a framework-independent Agent Core and offline deterministic mock
+adapters for review.
 
 Implemented so far:
 
@@ -17,9 +18,13 @@ Implemented so far:
 - public verifier for contract hash, manifest and provenance integrity.
 - framework-independent Agent Core behind explicit ports;
 - focused core tests for stop, security and contract-vector behavior.
+- deterministic offline mock adapters and synthetic public fixtures;
+- mock adapter tests for advertised schemas, controlled outcomes, security
+  fixtures and deterministic repeatability.
+- package data resources for wheel-installed offline mock runs.
 
-Planned later slices add deterministic mock adapters and a local Mock Agent API.
-Those pieces are not implemented yet.
+The local Mock Agent API is planned for a later slice. No API server, network
+listener, production auth, durable state or production data is implemented.
 
 ## Install
 
@@ -38,6 +43,12 @@ python -m compileall src
 python scripts/check_contract_export.py
 ```
 
+Run one deterministic offline mock scenario from Python:
+
+```bash
+python -c "from agent_coach.mock import build_mock_composition; c = build_mock_composition('grounded_success'); r = c.runner.run(c.request); print(r.answer_status, r.stop_reason.value)"
+```
+
 The project has no runtime dependencies. Development tools are declared only as
 optional extras.
 
@@ -54,6 +65,7 @@ sha256 values for every exported file.
 - [Architecture](docs/architecture.md)
 - [API status](docs/api.md)
 - [Core boundary](docs/core.md)
+- [Mock adapters](docs/mock_adapters.md)
 - [Demo status](docs/demo.md)
 - [Provenance](docs/provenance.md)
 - [Implementation plan](docs/implementation_plan.md)

@@ -1,0 +1,449 @@
+{
+  "schema_version": "agent-coach-mock-fixtures/1.0.0",
+  "provenance": {
+    "classification": "synthetic_public_review_fixture",
+    "source": "D4 deterministic mock adapter slice",
+    "contains_production_data": false,
+    "contains_credentials": false,
+    "contains_hometutor_runtime_dependency": false
+  },
+  "advertised_read_only_tools": [
+    "learner.get_profile",
+    "rag.search",
+    "quiz.generate",
+    "cards.get_due",
+    "catalog.list"
+  ],
+  "controlled_outcomes": [
+    "success",
+    "empty",
+    "validation_failure",
+    "timeout",
+    "rate_limit",
+    "dependency_failure",
+    "security_failure",
+    "oversized_result",
+    "prompt_injection",
+    "fake_secret"
+  ],
+  "scenarios": [
+    {
+      "id": "grounded_success",
+      "question": "Explain photosynthesis and suggest practice.",
+      "run_id": "mock-grounded-success",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Load learner context.",
+          "tool_name": "learner.get_profile",
+          "tool_args": {}
+        },
+        {
+          "action": "tool_call",
+          "thought": "Find grounded source evidence.",
+          "tool_name": "rag.search",
+          "tool_args": {
+            "query": "photosynthesis energy glucose",
+            "top_k": 2
+          }
+        },
+        {
+          "action": "tool_call",
+          "thought": "Prepare a short practice branch.",
+          "tool_name": "quiz.generate",
+          "tool_args": {
+            "topic": "photosynthesis",
+            "learning_mode": "practice"
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "Answer with citation.",
+          "final_answer": "Photosynthesis converts light energy into chemical energy stored in glucose [1]. Practice next with two retrieval questions."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "learner.get_profile",
+          "kind": "success",
+          "data": {
+            "summary": "Learner profile: intermediate, concise explanations preferred."
+          },
+          "meta": {}
+        },
+        {
+          "tool_name": "rag.search",
+          "kind": "success",
+          "data": {
+            "chunks": [
+              {
+                "text": "Photosynthesis converts light energy into chemical energy stored in glucose.",
+                "source": "photosynthesis-basics.md"
+              }
+            ]
+          },
+          "meta": {
+            "sources": [
+              {
+                "file_name": "photosynthesis-basics.md",
+                "text": "Photosynthesis converts light energy into chemical energy stored in glucose.",
+                "cite_index": 1
+              }
+            ]
+          }
+        },
+        {
+          "tool_name": "quiz.generate",
+          "kind": "success",
+          "data": {
+            "summary": "Generated two synthetic multiple-choice practice questions."
+          },
+          "meta": {}
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "grounded",
+        "tool_calls": [
+          "learner.get_profile",
+          "rag.search",
+          "quiz.generate"
+        ],
+        "source_count": 1
+      }
+    },
+    {
+      "id": "empty_cards",
+      "question": "What cards are due now?",
+      "run_id": "mock-empty-cards",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Check due cards.",
+          "tool_name": "cards.get_due",
+          "tool_args": {
+            "limit": 3
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "No evidence to cite.",
+          "final_answer": "Insufficient evidence: no due cards were available in the synthetic fixture."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "cards.get_due",
+          "kind": "empty"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "cards.get_due"
+        ],
+        "source_count": 0
+      }
+    },
+    {
+      "id": "validation_failure",
+      "question": "Find a catalog section for calculus.",
+      "run_id": "mock-validation-failure",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Browse catalog.",
+          "tool_name": "catalog.list",
+          "tool_args": {
+            "query": "calculus"
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "Validation failed.",
+          "final_answer": "Insufficient evidence: the synthetic catalog request failed validation."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "catalog.list",
+          "kind": "validation_failure"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "catalog.list"
+        ],
+        "source_count": 0
+      }
+    },
+    {
+      "id": "timeout",
+      "question": "Search a slow topic.",
+      "run_id": "mock-timeout",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Search source material.",
+          "tool_name": "rag.search",
+          "tool_args": {
+            "query": "slow synthetic topic",
+            "top_k": 1
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "Timeout prevents grounding.",
+          "final_answer": "Insufficient evidence: the synthetic search timed out."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "rag.search",
+          "kind": "timeout"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "rag.search"
+        ],
+        "source_count": 0
+      }
+    },
+    {
+      "id": "rate_limit",
+      "question": "Generate practice while rate limited.",
+      "run_id": "mock-rate-limit",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Try practice generation.",
+          "tool_name": "quiz.generate",
+          "tool_args": {
+            "topic": "limits",
+            "learning_mode": "practice"
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "Rate limit prevents generation.",
+          "final_answer": "Insufficient evidence: the synthetic quiz tool was rate limited."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "quiz.generate",
+          "kind": "rate_limit"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "quiz.generate"
+        ],
+        "source_count": 0
+      }
+    },
+    {
+      "id": "dependency_failure",
+      "question": "Browse when a dependency is unavailable.",
+      "run_id": "mock-dependency-failure",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Browse catalog.",
+          "tool_name": "catalog.list",
+          "tool_args": {
+            "query": "dependency"
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "Dependency failed.",
+          "final_answer": "Insufficient evidence: the synthetic catalog dependency was unavailable."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "catalog.list",
+          "kind": "dependency_failure"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "catalog.list"
+        ],
+        "source_count": 0
+      }
+    },
+    {
+      "id": "security_failure",
+      "question": "Load learner context after an unsafe request.",
+      "run_id": "mock-security-failure",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Load learner context.",
+          "tool_name": "learner.get_profile",
+          "tool_args": {}
+        },
+        {
+          "action": "final_answer",
+          "thought": "Security rejected output.",
+          "final_answer": "Insufficient evidence: the synthetic learner tool was rejected by policy."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "learner.get_profile",
+          "kind": "security_failure"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "learner.get_profile"
+        ],
+        "source_count": 0
+      }
+    },
+    {
+      "id": "oversized_result",
+      "question": "Handle an oversized search result.",
+      "run_id": "mock-oversized-result",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Search returns too much text.",
+          "tool_name": "rag.search",
+          "tool_args": {
+            "query": "oversized synthetic topic",
+            "top_k": 1
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "Oversized result has no source citation.",
+          "final_answer": "Insufficient evidence: the synthetic oversized result had no citeable source."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "rag.search",
+          "kind": "oversized_result"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "rag.search"
+        ],
+        "source_count": 0
+      }
+    },
+    {
+      "id": "prompt_injection",
+      "question": "Search content containing injection text.",
+      "run_id": "mock-prompt-injection",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Search unsafe content.",
+          "tool_name": "rag.search",
+          "tool_args": {
+            "query": "unsafe synthetic prompt",
+            "top_k": 1
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "Injection must not ground answer.",
+          "final_answer": "Insufficient evidence: unsafe synthetic content was rejected."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "rag.search",
+          "kind": "prompt_injection"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "rag.search"
+        ],
+        "source_count": 1
+      }
+    },
+    {
+      "id": "fake_secret",
+      "question": "Search content containing a fake secret.",
+      "run_id": "mock-fake-secret",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Search secret-like synthetic content.",
+          "tool_name": "rag.search",
+          "tool_args": {
+            "query": "synthetic fake secret",
+            "top_k": 1
+          }
+        },
+        {
+          "action": "final_answer",
+          "thought": "Secret-like content must not ground answer.",
+          "final_answer": "Insufficient evidence: secret-like synthetic content was redacted."
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "rag.search",
+          "kind": "fake_secret"
+        }
+      ],
+      "expected": {
+        "stop_reason": "completed",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "rag.search"
+        ],
+        "source_count": 1
+      }
+    },
+    {
+      "id": "forbidden_identity_arg",
+      "question": "Planner attempts to supply harness-only identity.",
+      "run_id": "mock-forbidden-identity-arg",
+      "decisions": [
+        {
+          "action": "tool_call",
+          "thought": "Unsafe identity injection.",
+          "tool_name": "learner.get_profile",
+          "tool_args": {
+            "user_id": "attacker"
+          }
+        }
+      ],
+      "tool_results": [],
+      "expected": {
+        "stop_reason": "invalid_decision",
+        "answer_status": "abstain",
+        "tool_calls": [
+          "learner.get_profile"
+        ],
+        "source_count": 0
+      }
+    }
+  ]
+}

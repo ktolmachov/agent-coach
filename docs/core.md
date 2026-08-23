@@ -58,6 +58,7 @@ D3 remediation invariants:
   byte-for-byte public labels, including path, query and fragment components.
 - Terminal tool-call paths record the step before the completed event.
 
-The core is not a runnable API server and contains no deterministic mock
-adapters. Tests use in-test fake ports only to characterize the port contract
-and verify that a full run can complete without framework dependencies.
+The core is not a runnable API server and does not own deterministic mock
+adapters internally. D4 mock adapters live in `agent_coach.mock` and use the
+core only through explicit ports. Core tests still use in-test fake ports to
+characterize the port contract without coupling core behavior to fixtures.

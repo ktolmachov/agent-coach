@@ -12,3 +12,8 @@
 - Exported Agent contract bundle `agent-contracts/1.0.0` with file-level
   provenance manifest.
 - Deterministic public contract test vector and offline export verifier.
+- Framework-independent Agent Core behind explicit ports.
+- Deterministic offline mock adapters, synthetic public fixtures and focused
+  adapter/security/golden tests.
+- Packaged mock fixture and contract resources for wheel-installed offline
+  runs.

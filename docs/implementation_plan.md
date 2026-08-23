@@ -179,6 +179,8 @@ Stop:
 
 ## D4 - Deterministic Mock Adapters
 
+Status: complete.
+
 Inputs:
 
 - D3 Agent Core ports;
@@ -192,6 +194,27 @@ Write-set:
 - synthetic fixtures with explicit public provenance;
 - adapter tests and golden assertions;
 - docs for deterministic offline behavior.
+
+Implemented artifacts:
+
+- `src/agent_coach/mock/fixtures.py`;
+- `src/agent_coach/mock/adapters.py`;
+- `src/agent_coach/mock/composition.py`;
+- `src/agent_coach/data/mock_scenarios.json`;
+- `src/agent_coach/data/agent_contract_bundle.json`;
+- `fixtures/mock_scenarios.json`;
+- `tests/test_mock_adapters.py`;
+- `docs/mock_adapters.md`.
+
+D4 remediation evidence:
+
+- ephemeral store projections sanitize request `run_id`, `user_id`, `question`
+  and completed trace fields before retention;
+- default fixture and contract loading uses package resources, so wheel installs
+  do not require a source checkout;
+- focused adapter tests include package-resource parity, tainted-store
+  regression coverage, exact stable scenario projections and all controlled
+  outcome categories.
 
 Non-goals:
 
