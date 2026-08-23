@@ -1,0 +1,10 @@
+Agent Coach
+
+This repository is a standalone diploma demonstration distribution.
+It includes public-safe documentation derived from the HomeTutor ADR-0007
+architecture decision record. No copyright owner is declared here beyond the
+license terms already present in LICENSE.
+
+D1 contains repository foundation only. It exports no HomeTutor runtime code,
+contracts, fixtures, learner data, credentials, provider configuration or
+generated runtime state.
