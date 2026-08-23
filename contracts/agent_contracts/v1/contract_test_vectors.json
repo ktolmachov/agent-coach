@@ -3,7 +3,7 @@
   "contract_schema_hash": "218c90732c25ae2f9b26c4f5a9ea5ee81c28bf797299c99b53e310bf22315910",
   "contract_schema_version": "agent-contracts/1.0.0",
   "default_read_only_tool_count": 10,
-  "exported_contract_sha256": "548b5fcd110a4357e63bc3f4b76176bb595fbb7c4bf122e5742bb6cb8cb784f8",
+  "exported_contract_sha256": "c00f7fa0167dbec981a08ed95fbbbe1037d796e2f2413221a36b0eb5f02aa605",
   "forbidden_model_arg_fields": [
     "query_options",
     "question",

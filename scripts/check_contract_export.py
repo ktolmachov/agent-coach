@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,23 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _source_blob_sha256(source_root: Path, commit: str, source_path: str) -> str:
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"safe.directory={source_root}",
+            "-C",
+            str(source_root),
+            "show",
+            f"{commit}:{source_path}",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return hashlib.sha256(result.stdout).hexdigest()
 
 
 def _assert_relative_path(value: str, field: str) -> None:
@@ -166,12 +184,17 @@ def validate_export(
         _assert_no_forbidden_content(target_path)
 
         if source_root is not None:
-            source_path = source_root / entry["source_path"]
-            if not source_path.exists():
-                raise ContractExportError(
-                    f"missing source file: {entry['source_path']}"
+            try:
+                source_sha = _source_blob_sha256(
+                    source_root,
+                    str(manifest["source_git_commit"]),
+                    entry["source_path"],
                 )
-            if _sha256(source_path) != entry.get("source_sha256"):
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise ContractExportError(
+                    f"cannot read source blob: {entry['source_path']}"
+                ) from exc
+            if source_sha != entry.get("source_sha256"):
                 raise ContractExportError(f"source hash drift: {entry['source_path']}")
 
         if entry["target_path"].endswith("agent_contract_bundle.json"):
