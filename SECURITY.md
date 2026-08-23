@@ -8,8 +8,15 @@ provider clients and no data persistence.
 
 ## Reporting Issues
 
-Please report security issues through the repository issue tracker or the
-course review channel used for this diploma submission.
+Do not report security vulnerabilities in public issues.
+
+Use GitHub Private Vulnerability Reporting or a GitHub Security Advisory when
+it is enabled for this repository. If that private channel is unavailable, use
+the non-public course review channel for this diploma submission and include
+only the minimum details needed to reproduce the issue.
+
+Public issues are appropriate for ordinary defects, documentation questions and
+non-sensitive enhancement requests.
 
 ## Public Safety Rules
 
