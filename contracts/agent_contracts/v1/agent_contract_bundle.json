@@ -1,0 +1,799 @@
+{
+  "contracts": {
+    "answer_status_mapping": {
+      "owner": "app.agent.contracts.AgentRunResult.answer_status",
+      "rules": [
+        "stop_reason=guardrail_triggered -> guardrails_fallback",
+        "stop_reason=completed AND NOT answer_fallback AND NOT explicit abstention AND grounded retrieval observation AND source-grounded answer AND grounding source citation -> grounded",
+        "otherwise -> abstain"
+      ]
+    },
+    "current_vs_deferred": {
+      "current_embedded": "this bundle freezes the in-process embedded contracts of app/agent/ — the only production source of truth",
+      "deferred_network": "Agent HTTP API / MCP transport are a DRAFT in ADR-0006 only; they do not exist and require a follow-up ADR after a measured decision gate"
+    },
+    "enums": {
+      "agent_phases": [
+        "scenario_selection",
+        "learner_context",
+        "knowledge_retrieval",
+        "practice_branch",
+        "final_validation"
+      ],
+      "agent_states": [
+        "running",
+        "tool_call",
+        "repairing",
+        "needs_human",
+        "stopped",
+        "completed"
+      ],
+      "answer_status": [
+        "grounded",
+        "abstain",
+        "guardrails_fallback"
+      ],
+      "cost_status": [
+        "estimated",
+        "local_zero",
+        "unknown"
+      ],
+      "hitl_action_statuses": [
+        "pending",
+        "executed",
+        "rejected",
+        "expired"
+      ],
+      "phase_statuses": [
+        "completed",
+        "skipped",
+        "failed"
+      ],
+      "resume_result_statuses": [
+        "not_found",
+        "executed",
+        "rejected",
+        "expired"
+      ],
+      "stop_reasons": [
+        {
+          "is_success": true,
+          "value": "completed"
+        },
+        {
+          "is_success": false,
+          "value": "max_steps"
+        },
+        {
+          "is_success": false,
+          "value": "max_time"
+        },
+        {
+          "is_success": false,
+          "value": "max_tokens"
+        },
+        {
+          "is_success": false,
+          "value": "max_cost"
+        },
+        {
+          "is_success": false,
+          "value": "repeated_tool_call"
+        },
+        {
+          "is_success": false,
+          "value": "tool_error_limit"
+        },
+        {
+          "is_success": false,
+          "value": "invalid_args_after_repair"
+        },
+        {
+          "is_success": false,
+          "value": "guardrail_triggered"
+        },
+        {
+          "is_success": false,
+          "value": "needs_human"
+        },
+        {
+          "is_success": false,
+          "value": "unknown_tool"
+        },
+        {
+          "is_success": false,
+          "value": "llm_error"
+        },
+        {
+          "is_success": false,
+          "value": "invalid_decision"
+        }
+      ],
+      "tool_access": [
+        "read",
+        "write"
+      ]
+    },
+    "error_taxonomy": {
+      "current_embedded": {
+        "hitl_domain_error": "app.agent.hitl.AgentHitlError",
+        "resume_statuses": [
+          "not_found",
+          "executed",
+          "rejected",
+          "expired"
+        ],
+        "terminal_states": "StopReason enum (see enums.stop_reasons)",
+        "tool_failure": "ToolResult(ok=False, error=<string>)"
+      },
+      "deferred_normalized": {
+        "planned_categories": [
+          "validation",
+          "timeout",
+          "rate_limit",
+          "dependency",
+          "security"
+        ],
+        "status": "deferred to Slice 3 adapter work — does NOT exist yet"
+      }
+    },
+    "pending_actions": {
+      "idempotency_key": "sha256 of canonical JSON {run_id, tool, args}; embedded exactly-once dedupe only. The future network API uses a request Idempotency-Key header instead — it is NOT a global content-hash dedupe of embedded actions.",
+      "lifecycle": "proposal -> durable pending (owner-bound, atomic with run persist) -> human approve/reject -> conditional SQL claim (BEGIN IMMEDIATE + UPDATE ... WHERE status='pending') -> domain effect + result + terminal status in one transaction -> authenticated result lookup",
+      "supported_write_tools": [
+        "cards.save_deck",
+        "quiz.record_result",
+        "sr.update_card"
+      ],
+      "supported_write_tools_owner": "app.agent.hitl._SUPPORTED_WRITE_TOOLS",
+      "ttl": {
+        "bounds_hours": [
+          1,
+          720
+        ],
+        "default_hours": 24,
+        "setting": "AGENT_PENDING_TTL_HOURS"
+      },
+      "unknown_write_tool": "fail-closed AgentHitlError / ValueError before any domain write"
+    },
+    "run_projection": {
+      "agent_runs": [
+        "run_id",
+        "scenario_id",
+        "question",
+        "answer_status",
+        "stop_reason",
+        "state",
+        "tool_calls",
+        "summary",
+        "created_at",
+        "completed_at",
+        "steps",
+        "pending_action?"
+      ],
+      "agent_steps": [
+        "step_index",
+        "state",
+        "tool_name",
+        "tool_args",
+        "tool_ok",
+        "tool_error",
+        "result_summary",
+        "repair_attempt",
+        "created_at"
+      ],
+      "ownership": "every agent_runs row has explicit user_id; get/list/resume are owner-filtered; legacy rows without provable owner are migrated fail-closed as __legacy_unowned__ and are not exposed; owner mismatch returns not_found (HTTP 404)",
+      "pending_action": [
+        "run_id",
+        "idempotency_key",
+        "user_id",
+        "tool_name",
+        "args",
+        "proposal",
+        "status",
+        "result",
+        "created_at",
+        "updated_at",
+        "expires_at"
+      ],
+      "persistence_columns": {
+        "agent_pending_actions": [
+          "run_id",
+          "idempotency_key",
+          "user_id",
+          "tool_name",
+          "args_json",
+          "proposal_json",
+          "status",
+          "result_json",
+          "created_at",
+          "updated_at",
+          "expires_at"
+        ],
+        "agent_runs": [
+          "run_id",
+          "user_id",
+          "scenario_id",
+          "question",
+          "answer_status",
+          "stop_reason",
+          "state",
+          "tool_calls_json",
+          "summary_json",
+          "created_at",
+          "completed_at"
+        ],
+        "agent_steps": [
+          "id",
+          "run_id",
+          "step_index",
+          "state",
+          "tool_name",
+          "tool_args_json",
+          "tool_ok",
+          "tool_error",
+          "result_summary_json",
+          "repair_attempt",
+          "created_at"
+        ]
+      },
+      "redaction": "compact projections only: redacted/truncated args and result summaries; no raw retrieved chunks, provider responses or credentials"
+    },
+    "tool_context": {
+      "args_base": "app.agent.contracts.ToolArgModel (extra=forbid)",
+      "harness_only_fields": [
+        "query_options",
+        "question",
+        "run_id",
+        "session_id",
+        "user_id"
+      ],
+      "rule": "every ToolContext field (user_id/session_id/run_id/question/query_options) is injected by the authenticated harness; the model can never supply them in tool arguments."
+    },
+    "tool_result": {
+      "fields": [
+        "data",
+        "error",
+        "meta",
+        "ok"
+      ],
+      "meta_conventions": [
+        "sources",
+        "token_usage",
+        "estimated_cost_usd"
+      ],
+      "security_boundary": "ToolResult output is untrusted input and passes the existing security/redaction boundary before the next planner decision; raw chunks and sensitive payloads are not persisted in traces."
+    },
+    "tools": {
+      "read_only_default": [
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "deck_id": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Deck Id"
+              },
+              "limit": {
+                "default": 5,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "tags": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Tags"
+              }
+            },
+            "title": "CardsGetDueArgs",
+            "type": "object"
+          },
+          "description": "Return flashcards due for spaced-repetition review right now, optionally filtered by deck or tags.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 2000
+          },
+          "name": "cards.get_due",
+          "when_to_use": "Use when the learner should review due cards, or to understand what material needs reinforcement."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "context": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Context"
+              },
+              "topic": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Topic"
+              }
+            },
+            "title": "CardsProposeArgs",
+            "type": "object"
+          },
+          "description": "Propose draft flashcard candidates from a topic or context. Candidates are NOT saved — they are returned for review only.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 1600
+          },
+          "name": "cards.propose",
+          "when_to_use": "Use after explaining a topic to suggest cards the learner might create. No persistence happens."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "description": "Browse courses / konspekts / sections of the current data area.\n\nPaths in the result are relative to the data directory (never invent paths).",
+            "properties": {
+              "course": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Course"
+              },
+              "level": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Level"
+              },
+              "query": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Query"
+              }
+            },
+            "title": "CatalogListArgs",
+            "type": "object"
+          },
+          "description": "Browse the area library: courses, vault konspekts (type:konspekt), and section headings. Returns real relative paths only — never invent paths. Use course filter for a specific course folder (e.g. Deep).",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 6000
+          },
+          "name": "catalog.list",
+          "when_to_use": "Use to find where a topic lives in a course or konspekt section («найди раздел про X в Deep»), or to list courses without activating scope."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "concept": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Concept"
+              }
+            },
+            "title": "GraphInspectArgs",
+            "type": "object"
+          },
+          "description": "Inspect the active knowledge graph: list concepts and prerequisites, or get a single concept node with its prerequisite chain.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 3000
+          },
+          "name": "graph.inspect",
+          "when_to_use": "Use to understand concept relationships, find prerequisites, or navigate the learning graph structure."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "title": "KonspektInspectArgs",
+            "type": "object"
+          },
+          "description": "Inspect the Living Konspekt workbench: list selected rows, their titles, statuses, and source counts without modifying the basket.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 3000
+          },
+          "name": "konspekt.inspect",
+          "when_to_use": "Use to understand what the learner has collected in their konspekt and what sections are selected."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "title": "LearnerGetProfileArgs",
+            "type": "object"
+          },
+          "description": "Return the personalized learner model: mastery level, learning goal, preferred style, cognitive load, emotional state, and mastery vector.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 3000
+          },
+          "name": "learner.get_profile",
+          "when_to_use": "Use at the start of a study session or when personalization affects the answer depth, style, or next step."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "topic": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Topic"
+              }
+            },
+            "title": "ProgressGetMasteryArgs",
+            "type": "object"
+          },
+          "description": "Return quiz mastery levels across concepts, weak concepts, and mastery row count. Optionally filter by topic.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 3000
+          },
+          "name": "progress.get_mastery",
+          "when_to_use": "Use to identify gaps, weak spots, or what the learner has already mastered before explaining or generating a quiz."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "learning_mode": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Learning Mode"
+              },
+              "topic": {
+                "title": "Topic",
+                "type": "string"
+              }
+            },
+            "required": [
+              "topic"
+            ],
+            "title": "QuizGenerateArgs",
+            "type": "object"
+          },
+          "description": "Generate a scoped quiz (multiple-choice questions) for a topic from the knowledge base, without recording results.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 4000
+          },
+          "name": "quiz.generate",
+          "when_to_use": "Use to create a practice quiz for a topic the learner is studying, or to check understanding after an explanation."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "query": {
+                "title": "Query",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "title": "RagAnswerArgs",
+            "type": "object"
+          },
+          "description": "Run a full RAG answer for a sub-question through the standard pipeline (retrieval + synthesis). Returns a grounded answer with sources.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 4000
+          },
+          "name": "rag.answer",
+          "when_to_use": "Use when a sub-question needs a complete synthesized answer grounded in the knowledge base, rather than just raw search chunks."
+        },
+        {
+          "access": "read",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "query": {
+                "title": "Query",
+                "type": "string"
+              },
+              "top_k": {
+                "default": 4,
+                "title": "Top K",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "title": "RagSearchArgs",
+            "type": "object"
+          },
+          "description": "Semantic search over the indexed knowledge base. Returns ranked source chunks (text excerpts) without generating an answer.",
+          "idempotent": false,
+          "limits": {
+            "max_result_chars": 7200
+          },
+          "name": "rag.search",
+          "when_to_use": "Use when you need to find relevant source material, facts, or excerpts to ground your answer. Prefer this before answering factual questions."
+        }
+      ],
+      "registry_policy": {
+        "default_registry": "read_only",
+        "settings_flag": "AGENT_WRITE_TOOLS_ENABLED (default false)",
+        "write_tools": "opt_in_via_write_enabled_registry_only"
+      },
+      "write_enabled_only": [
+        {
+          "access": "write",
+          "args_schema": {
+            "$defs": {
+              "CardsSaveDeckCardArgs": {
+                "additionalProperties": false,
+                "properties": {
+                  "back": {
+                    "maxLength": 8000,
+                    "minLength": 1,
+                    "title": "Back",
+                    "type": "string"
+                  },
+                  "front": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Front",
+                    "type": "string"
+                  },
+                  "tags": {
+                    "anyOf": [
+                      {
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Tags"
+                  }
+                },
+                "required": [
+                  "front",
+                  "back"
+                ],
+                "title": "CardsSaveDeckCardArgs",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cards": {
+                "items": {
+                  "$ref": "#/$defs/CardsSaveDeckCardArgs"
+                },
+                "maxItems": 40,
+                "minItems": 1,
+                "title": "Cards",
+                "type": "array"
+              },
+              "name": {
+                "maxLength": 160,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "source_identifier": {
+                "anyOf": [
+                  {
+                    "maxLength": 512,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Identifier"
+              },
+              "source_type": {
+                "default": "agent",
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Source Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "cards"
+            ],
+            "title": "CardsSaveDeckArgs",
+            "type": "object"
+          },
+          "description": "Propose saving a reviewed flashcard deck. Requires explicit human approval before any card is persisted.",
+          "idempotent": true,
+          "limits": {
+            "max_result_chars": 900
+          },
+          "name": "cards.save_deck",
+          "when_to_use": "Use only when the learner asked to save a deck or clearly accepted generated flashcards. The run must stop for confirmation."
+        },
+        {
+          "access": "write",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "attempt_number": {
+                "default": 1,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Attempt Number",
+                "type": "integer"
+              },
+              "concept": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Concept",
+                "type": "string"
+              },
+              "evidence_bound": {
+                "default": false,
+                "title": "Evidence Bound",
+                "type": "boolean"
+              },
+              "level": {
+                "default": "agent_quiz",
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Level",
+                "type": "string"
+              },
+              "origin": {
+                "default": "agent_quiz",
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Origin",
+                "type": "string"
+              },
+              "score": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Score",
+                "type": "number"
+              }
+            },
+            "required": [
+              "concept",
+              "score"
+            ],
+            "title": "QuizRecordResultArgs",
+            "type": "object"
+          },
+          "description": "Propose recording a completed quiz result. Requires explicit human approval before persistence.",
+          "idempotent": true,
+          "limits": {
+            "max_result_chars": 500
+          },
+          "name": "quiz.record_result",
+          "when_to_use": "Use only after the learner has completed a quiz and explicitly wants the result saved. The run must stop for confirmation."
+        },
+        {
+          "access": "write",
+          "args_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "minimum": 1,
+                "title": "Card Id",
+                "type": "integer"
+              },
+              "quality": {
+                "maximum": 5,
+                "minimum": 0,
+                "title": "Quality",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "card_id",
+              "quality"
+            ],
+            "title": "SrUpdateCardArgs",
+            "type": "object"
+          },
+          "description": "Propose recording a spaced-repetition review rating for one flashcard. Requires explicit human approval before persistence.",
+          "idempotent": true,
+          "limits": {
+            "max_result_chars": 400
+          },
+          "name": "sr.update_card",
+          "when_to_use": "Use only when the learner has just reviewed a specific card and gave an explicit rating. The run must stop for confirmation."
+        }
+      ]
+    },
+    "usage_cost": {
+      "cost_status_semantics": {
+        "estimated": "cloud usage with known pricing; total_cost_usd is a real estimate",
+        "local_zero": "local model; total_cost_usd=0 is a genuine zero",
+        "unknown": "unknown cloud pricing; total_cost_usd is null — never a false zero. Equivalent of pricing_unknown=true for future adapter surfaces."
+      },
+      "tool_internal_llm": "tools may report meta['token_usage'] / meta['estimated_cost_usd']; explicit tool-reported cost wins over runner estimates",
+      "trace_fields": [
+        "total_tokens",
+        "total_cost_usd",
+        "cost_status"
+      ]
+    }
+  },
+  "schema_hash": "218c90732c25ae2f9b26c4f5a9ea5ee81c28bf797299c99b53e310bf22315910",
+  "schema_version": "agent-contracts/1.0.0"
+}

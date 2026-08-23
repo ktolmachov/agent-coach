@@ -1,17 +1,29 @@
 # Provenance
 
 Source repository: HomeTutor
-Source commit: `397b251effeb3d2e3b751e44026c6ec429975fb6`
+Source commit: `292be74f97b18615388838c2a1ddf2e0879585e0`
 Source ADR path: `docs/adr/0007-agent-coach-diploma-distribution.md`
 Transformation: `public-safe derivative`
 
-D1 exports no HomeTutor runtime code, contracts, schemas, fixtures, learner
-data, provider configuration or generated runtime state. It creates only the
-public foundation needed to continue the D2-D7 implementation inside this
-repository.
+D1 exported no HomeTutor runtime code, contracts, schemas, fixtures, learner
+data, provider configuration or generated runtime state. It created only the
+public foundation needed to continue implementation inside this repository.
 
-The file-level export manifest begins in D2, when versioned public contracts
-and deterministic test vectors are exported. Until then, this document records
-only the source decision used to derive the public boundary documentation.
+D2 exports only public contract artifacts:
+
+- `contracts/agent_contracts/v1/agent_contract_bundle.json`, copied without
+  transformation from the source versioned contract artifact;
+- `contracts/agent_contracts/v1/contract_test_vectors.json`, deterministically
+  derived from that bundle for public validation;
+- `contracts/export_manifest.json`, which records source commit, source path,
+  target path, source sha256, target sha256 and transformation for each
+  exported file.
+
+The current exported contract version is `agent-contracts/1.0.0` with schema
+hash `218c90732c25ae2f9b26c4f5a9ea5ee81c28bf797299c99b53e310bf22315910`.
+
+The export is validated by `scripts/check_contract_export.py`. The default mode
+requires only this repository; an optional source checkout can be supplied by
+maintainers for source hash verification.
 
 Target repository baseline before D1: `81026a20ff4425e58b48a359700ddb01c76f36f7`

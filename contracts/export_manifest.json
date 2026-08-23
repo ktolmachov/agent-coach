@@ -1,0 +1,23 @@
+{
+  "contract_schema_hash": "218c90732c25ae2f9b26c4f5a9ea5ee81c28bf797299c99b53e310bf22315910",
+  "contract_version": "agent-contracts/1.0.0",
+  "export_version": "agent-coach-contract-export/1.0.0",
+  "files": [
+    {
+      "source_path": "docs/schemas/agent_contracts/v1/agent_contract_bundle.json",
+      "source_sha256": "548b5fcd110a4357e63bc3f4b76176bb595fbb7c4bf122e5742bb6cb8cb784f8",
+      "target_path": "contracts/agent_contracts/v1/agent_contract_bundle.json",
+      "target_sha256": "548b5fcd110a4357e63bc3f4b76176bb595fbb7c4bf122e5742bb6cb8cb784f8",
+      "transformation": "none"
+    },
+    {
+      "source_path": "docs/schemas/agent_contracts/v1/agent_contract_bundle.json",
+      "source_sha256": "548b5fcd110a4357e63bc3f4b76176bb595fbb7c4bf122e5742bb6cb8cb784f8",
+      "target_path": "contracts/agent_contracts/v1/contract_test_vectors.json",
+      "target_sha256": "75b496dd92d9716e472904e8f2c7a118ddfe85f5218f6d1fdb4f00cc59f01dda",
+      "transformation": "derived: deterministic public validation vector from exported contract bundle"
+    }
+  ],
+  "source_git_commit": "292be74f97b18615388838c2a1ddf2e0879585e0",
+  "source_repository": "hometutor"
+}
