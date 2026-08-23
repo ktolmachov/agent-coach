@@ -66,6 +66,8 @@ Stop:
 
 ## D2 - Contract and Provenance Export
 
+Status: complete.
+
 Inputs:
 
 - accepted D1 foundation commit;
