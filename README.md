@@ -53,6 +53,7 @@ python -m ruff check .
 python -m compileall src
 python scripts/check_contract_export.py
 python scripts/check_openapi_snapshot.py
+python scripts/check_drift_gate.py
 ```
 
 Run one deterministic offline mock scenario from Python:
@@ -72,6 +73,12 @@ hash is `218c90732c25ae2f9b26c4f5a9ea5ee81c28bf797299c99b53e310bf22315910`.
 The export manifest records the source commit, source path, target path and
 sha256 values for every exported file.
 
+Run `python scripts/check_drift_gate.py` for the public parity gate. Maintainers
+with both checkouts can additionally run
+`python scripts/check_drift_gate.py --source-root ../hometutor --json` to verify
+current HomeTutor contract parity without making the public CI depend on the
+private source checkout.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
@@ -80,5 +87,6 @@ sha256 values for every exported file.
 - [Mock adapters](docs/mock_adapters.md)
 - [Demo status](docs/demo.md)
 - [Provenance](docs/provenance.md)
+- [Drift gate](docs/drift_gate.md)
 - [Implementation plan](docs/implementation_plan.md)
 - [Boundary ADR](docs/adr/0001-diploma-distribution-boundary.md)

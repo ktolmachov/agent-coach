@@ -26,4 +26,12 @@ The export is validated by `scripts/check_contract_export.py`. The default mode
 requires only this repository; an optional source checkout can be supplied by
 maintainers for source hash verification.
 
+D6 adds `scripts/check_drift_gate.py`, which combines manifest validation,
+canonical contract hash equality, exact executable scenario projection hashes
+from `fixtures/drift_golden_projection_hashes.json`, security assertions and
+runtime absolute-path dependency scanning for code and runtime-consumed
+resources. The default mode remains public-CI independent; `--source-root
+<checkout>` adds current HomeTutor contract parity verification when both
+repositories are available.
+
 Target repository baseline before D1: `81026a20ff4425e58b48a359700ddb01c76f36f7`

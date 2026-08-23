@@ -333,6 +333,28 @@ Write-set:
 - parity tests and documentation;
 - CI updates that run the public drift checks without private checkout access.
 
+Implemented artifacts:
+
+- `scripts/check_drift_gate.py`;
+- `tests/test_drift_gate.py`;
+- `docs/drift_gate.md`;
+- CI steps for contract export, OpenAPI snapshot and public drift gate.
+
+D6 HOLD remediation evidence:
+
+- semantic parity is scenario-level exact projection-hash parity, including
+  answer, sources, trace, steps and tool outcomes, using a frozen independent
+  hash snapshot rather than production sanitizer/helper code;
+- fixture and frozen golden scenario id sets must match exactly, and golden
+  hashes must be lowercase sha256 digests;
+- runtime absolute-path scanning covers common private path forms in code and
+  runtime-consumed resources;
+- Python scanning folds bounded constant string concatenations so split path
+  literals cannot bypass the gate;
+- negative tests exercise the D6 gate directly for semantic corruption,
+  shared-helper drift, path bypasses, bounded CLI failure, malformed bundles
+  and current source contract drift.
+
 Non-goals:
 
 - no new runtime features;

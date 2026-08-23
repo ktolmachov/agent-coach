@@ -35,3 +35,9 @@ jobs:
         run: python -m ruff check .
       - name: Compile package
         run: python -m compileall src
+      - name: Check contract export
+        run: python scripts/check_contract_export.py
+      - name: Check OpenAPI snapshot
+        run: python scripts/check_openapi_snapshot.py
+      - name: Check drift gate
+        run: python scripts/check_drift_gate.py
