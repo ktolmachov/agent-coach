@@ -1,8 +1,8 @@
 # Agent Coach
 
 Agent Coach is a standalone deterministic diploma demo repository. It now
-contains the public repository foundation plus the first exported versioned
-contract artifacts for offline review.
+contains the public repository foundation, exported versioned contract
+artifacts and a framework-independent Agent Core for offline review.
 
 Implemented so far:
 
@@ -15,9 +15,11 @@ Implemented so far:
 - exported Agent contract bundle `agent-contracts/1.0.0`;
 - deterministic contract validation vectors and export manifest;
 - public verifier for contract hash, manifest and provenance integrity.
+- framework-independent Agent Core behind explicit ports;
+- focused core tests for stop, security and contract-vector behavior.
 
-Planned later slices add framework-independent Agent Core, deterministic mock
-adapters and a local Mock Agent API. Those pieces are not implemented yet.
+Planned later slices add deterministic mock adapters and a local Mock Agent API.
+Those pieces are not implemented yet.
 
 ## Install
 
@@ -51,6 +53,7 @@ sha256 values for every exported file.
 
 - [Architecture](docs/architecture.md)
 - [API status](docs/api.md)
+- [Core boundary](docs/core.md)
 - [Demo status](docs/demo.md)
 - [Provenance](docs/provenance.md)
 - [Implementation plan](docs/implementation_plan.md)

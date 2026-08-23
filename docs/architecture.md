@@ -1,8 +1,9 @@
 # Architecture
 
-The repository currently contains the public foundation and exported contract
-artifacts. The package is importable, but it does not yet contain Agent Core,
-adapters, runtime replay fixtures, an API server or HomeTutor runtime code.
+The repository currently contains the public foundation, exported contract
+artifacts and a framework-independent Agent Core. The package is importable,
+but it does not yet contain adapters, runtime replay fixtures, an API server or
+HomeTutor runtime code.
 
 The planned architecture is intentionally layered:
 
@@ -29,7 +30,10 @@ adapters with network, durable-state or authenticated adapters.
 ## Current Boundaries
 
 - The package has zero runtime dependencies.
-- Core modules are not present yet.
+- Core modules live under `src/agent_coach/core/` and depend only on the Python
+  standard library plus package-owned modules.
+- The core exposes explicit ports for planning, message building, security,
+  tool execution, usage accounting, clock and run storage.
 - No network listener is implemented.
 - No private HomeTutor checkout is needed to install, import or validate the
   exported contracts.

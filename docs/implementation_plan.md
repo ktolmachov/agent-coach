@@ -119,6 +119,8 @@ Stop:
 
 ## D3 - Framework-Independent Agent Core
 
+Status: complete.
+
 Inputs:
 
 - D2 contracts and public test vectors;
@@ -139,6 +141,17 @@ Non-goals:
 - no filesystem fixture loading from core modules;
 - no environment reads;
 - no production adapter implementation.
+
+Implemented artifacts:
+
+- `src/agent_coach/core/contracts.py`;
+- `src/agent_coach/core/ports.py`;
+- `src/agent_coach/core/runner.py`;
+- `src/agent_coach/core/stop_controller.py`;
+- `src/agent_coach/core/security.py`;
+- `src/agent_coach/core/text.py`;
+- `tests/test_core.py`;
+- `docs/core.md`.
 
 Promotion thresholds:
 
