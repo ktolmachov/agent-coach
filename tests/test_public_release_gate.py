@@ -85,6 +85,83 @@ def test_secret_allowlist_requires_exact_fixture_matches(tmp_path) -> None:
     assert failures == ["secret-like token in tests\\test_mock_adapters.py"]
 
 
+def test_release_surface_scans_unknown_suffix_and_suffixless_files(tmp_path) -> None:
+    paths = [
+        Path("NOTICE"),
+        Path("scripts/leak.ps1"),
+    ]
+    (tmp_path / "scripts").mkdir()
+    ghp_token = "ghp_" + ("A" * 30)
+    private_path = "C:" + "\\".join(("", "Users", "Alice", "real-private.txt"))
+    (tmp_path / "NOTICE").write_text(f"{ghp_token}\n", encoding="utf-8")
+    (tmp_path / "scripts" / "leak.ps1").write_text(
+        f"Write-Output {private_path!r}\n",
+        encoding="utf-8",
+    )
+
+    failures = gate._check_publishable_text(tmp_path, paths)
+
+    assert failures == [
+        "secret-like token in NOTICE",
+        "private local path marker in scripts\\leak.ps1",
+    ]
+
+
+def test_sensitive_container_files_are_blocked() -> None:
+    paths = [
+        Path(".env"),
+        Path(".env.local"),
+        Path("leaked.pem"),
+        Path("certs/private.key"),
+        Path("certs/bundle.p12"),
+        Path(".env.example"),
+    ]
+
+    failures = gate._check_sensitive_containers(paths)
+
+    assert failures == [
+        "sensitive credential container is not release-safe: .env",
+        "sensitive credential container is not release-safe: .env.local",
+        "sensitive credential container is not release-safe: leaked.pem",
+        "sensitive credential container is not release-safe: certs\\private.key",
+        "sensitive credential container is not release-safe: certs\\bundle.p12",
+    ]
+
+
+def test_secret_scan_rejects_pem_github_and_openai_tokens(tmp_path) -> None:
+    path = Path("docs/secrets.md")
+    (tmp_path / "docs").mkdir()
+    pem = "-----BEGIN " + "PRIVATE KEY-----"
+    github_classic = "ghp_" + ("B" * 30)
+    github_fine_grained = "github_pat_" + ("C" * 40)
+    openai_project = "sk-" + "proj-" + ("D" * 30)
+    (tmp_path / path).write_text(
+        "\n".join((pem, github_classic, github_fine_grained, openai_project)),
+        encoding="utf-8",
+    )
+
+    failures = gate._check_publishable_text(tmp_path, [path])
+
+    assert failures == ["secret-like token in docs\\secrets.md"]
+
+
+def test_secret_scan_rejects_encrypted_and_pgp_private_keys_in_markdown(
+    tmp_path,
+) -> None:
+    path = Path("docs/probe.md")
+    (tmp_path / "docs").mkdir()
+    encrypted_pem = "-----BEGIN " + "ENCRYPTED PRIVATE KEY-----"
+    pgp_block = "-----BEGIN " + "PGP PRIVATE KEY BLOCK-----"
+    (tmp_path / path).write_text(
+        f"{encrypted_pem}\n{pgp_block}\n",
+        encoding="utf-8",
+    )
+
+    failures = gate._check_publishable_text(tmp_path, [path])
+
+    assert failures == ["secret-like token in docs\\probe.md"]
+
+
 def test_production_claims_are_rejected_in_all_markdown(tmp_path) -> None:
     paths = [Path("README.md"), Path("docs/claims.md")]
     (tmp_path / "docs").mkdir()

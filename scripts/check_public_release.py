@@ -15,17 +15,24 @@ from agent_coach.api import create_app
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DRIFT_GATE_PATH = REPO_ROOT / "scripts" / "check_drift_gate.py"
 
-PUBLISHABLE_SUFFIXES = {".md", ".json", ".toml", ".txt", ".yml", ".yaml"}
-RUNTIME_SUFFIXES = {".py", ".json", ".toml", ".txt"}
-PUBLISHABLE_ROOTS = {
-    ".github",
-    "contracts",
-    "docs",
-    "fixtures",
-    "scripts",
-    "src",
-    "tests",
+KNOWN_BINARY_SUFFIXES = {
+    ".7z",
+    ".bmp",
+    ".gif",
+    ".gz",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".pdf",
+    ".png",
+    ".pyo",
+    ".pyc",
+    ".tar",
+    ".webp",
+    ".whl",
+    ".zip",
 }
+SENSITIVE_CONTAINER_SUFFIXES = {".key", ".p12", ".pem", ".pfx"}
 
 
 def _win_path(drive: str, *parts: str) -> str:
@@ -60,9 +67,22 @@ def _demo_token() -> str:
     return "demo" + "-token"
 
 
+def _pem_begin(label: str) -> str:
+    return "-" * 5 + "BEGIN " + label + "-" * 5
+
+
 SECRET_PATTERNS = (
+    re.compile(
+        re.escape("-" * 5 + "BEGIN ")
+        + r"(?:(?:RSA|DSA|EC|OPENSSH|ENCRYPTED) )?PRIVATE KEY"
+        + re.escape("-" * 5)
+    ),
+    re.compile(re.escape(_pem_begin("PGP PRIVATE KEY BLOCK"))),
     re.compile(r"\bAWS_SECRET_ACCESS_KEY\s*=\s*['\"]?[A-Za-z0-9/+=]{20,}"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bghp_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bsk-proj-[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"\b(?:api[_-]?key|secret|token)\s*[:=]\s*['\"]?[A-Za-z0-9_.:/+=-]{16,}"),
     re.compile(r"\bBearer\s+[A-Za-z0-9_.:/+=-]{16,}"),
 )
@@ -223,6 +243,7 @@ def build_failures(repo_root: Path = REPO_ROOT) -> list[str]:
     failures: list[str] = []
     files = tuple(_release_files(repo_root))
     failures.extend(_check_required_files(repo_root))
+    failures.extend(_check_sensitive_containers(files))
     failures.extend(_check_publishable_text(repo_root, files))
     failures.extend(_check_readme_claims(repo_root, files))
     failures.extend(_check_markdown_links(repo_root, files))
@@ -266,16 +287,28 @@ def _check_required_files(repo_root: Path) -> list[str]:
 def _check_publishable_text(repo_root: Path, files: Iterable[Path]) -> list[str]:
     failures: list[str] = []
     for path in files:
-        if not _is_publishable_or_runtime(path):
+        if _is_known_binary(path):
             continue
         absolute_path = repo_root / path
-        text = absolute_path.read_text(encoding="utf-8")
+        text = _read_text_or_none(absolute_path)
+        if text is None:
+            continue
         if _private_path_hits(path, absolute_path, text):
             failures.append(f"private local path marker in {path}")
         for hit in _secret_hits(text):
             if not _is_allowed_synthetic_secret(path, hit):
                 failures.append(f"secret-like token in {path}")
                 break
+    return failures
+
+
+def _check_sensitive_containers(files: Iterable[Path]) -> list[str]:
+    failures = []
+    for path in files:
+        if _is_sensitive_container(path):
+            failures.append(
+                f"sensitive credential container is not release-safe: {path}"
+            )
     return failures
 
 
@@ -381,12 +414,18 @@ def _check_dirty_generated_artifacts(repo_root: Path) -> list[str]:
     return failures
 
 
-def _is_publishable_or_runtime(path: Path) -> bool:
-    if path.parts[0] not in PUBLISHABLE_ROOTS:
-        return path.suffix in PUBLISHABLE_SUFFIXES
-    if path.parts[0] == "src":
-        return path.suffix in RUNTIME_SUFFIXES
-    return path.suffix in PUBLISHABLE_SUFFIXES | RUNTIME_SUFFIXES
+def _is_known_binary(path: Path) -> bool:
+    return path.suffix.casefold() in KNOWN_BINARY_SUFFIXES
+
+
+def _is_sensitive_container(path: Path) -> bool:
+    name = path.name.casefold()
+    suffix = path.suffix.casefold()
+    if suffix in SENSITIVE_CONTAINER_SUFFIXES:
+        return True
+    if name == ".env":
+        return True
+    return name.startswith(".env.") and name != ".env.example"
 
 
 def _private_path_hits(path: Path, absolute_path: Path, text: str) -> bool:
@@ -411,6 +450,13 @@ def _release_files(repo_root: Path) -> Iterable[Path]:
     ).splitlines():
         if line:
             yield Path(line)
+
+
+def _read_text_or_none(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def _secret_hits(text: str) -> Iterable[str]:

@@ -420,16 +420,18 @@ D7 release evidence:
   result projection and limitations;
 - `scripts/check_public_release.py` validates required review files, README
   safety wording, concrete private security reporting fallback, private local
-  path markers and high-confidence secret patterns in publishable/runtime
-  files including tests, current OpenAPI, internal Markdown links, release
-  evidence freshness and tracked or dirty generated release artifacts;
+  path markers and high-confidence secret patterns in all text-decodable
+  release files including tests and unknown suffixes, current OpenAPI,
+  internal Markdown links, release evidence freshness, sensitive credential
+  containers and tracked or dirty generated release artifacts;
 - release tag creation remains gated on explicit maintainer approval.
 
 HOLD remediation status:
 
 - public release gate now fails closed for generic private paths, secret-like
-  credentials, production-readiness claims outside README, missing concrete
-  private security fallback and stale/dirty release evidence;
+  credentials, PEM private keys, GitHub/OpenAI token forms, production-readiness
+  claims outside README, missing concrete private security fallback, sensitive
+  credential containers and stale/dirty release evidence;
 - promotion remains pending an independent D7 review on a clean commit.
 
 Non-goals:
