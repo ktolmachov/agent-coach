@@ -62,3 +62,9 @@ The core is not a runnable API server and does not own deterministic mock
 adapters internally. D4 mock adapters live in `agent_coach.mock` and use the
 core only through explicit ports. Core tests still use in-test fake ports to
 characterize the port contract without coupling core behavior to fixtures.
+
+D9 adds a typed `PlannerCallResult` so live adapters can return routing
+metadata (`model_role`, `model_id`, `backend`, `routing_status`) without
+hiding it in `thought`, `raw` or token maps. Deterministic mock and
+local-vector planners return an empty routing tuple, so their traces stay
+unchanged.

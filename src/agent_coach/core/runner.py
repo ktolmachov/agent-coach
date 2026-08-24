@@ -9,7 +9,9 @@ from agent_coach.core.contracts import (
     AgentRunResult,
     AgentState,
     AgentStep,
+    PlannerCallResult,
     PlannerDecision,
+    PlannerRouting,
     RunRequest,
     StopReason,
     ToolAccess,
@@ -149,6 +151,9 @@ class AgentRunner:
             query_options=dict(request.query_options),
             limits=request.limits,
         )
+        reset_error = self._reset_planner_run()
+        if reset_error:
+            return self._request_failure(request, StopReason.LLM_ERROR, reset_error)
         started_at, clock_error = self._clock_now()
         if clock_error:
             return self._request_failure(request, StopReason.LLM_ERROR, clock_error)
@@ -212,11 +217,18 @@ class AgentRunner:
                 messages = self._message_builder.build_messages(
                     request, steps=steps, tools=self._tools
                 )
-                decision, usage = self._planner.decide(
+                messages = list(messages)
+                messages.append(_budget_message(request, state, now_monotonic=now))
+                call_result = self._planner.decide(
                     messages, steps=steps, tools=self._tools
                 )
+                if not isinstance(call_result, PlannerCallResult):
+                    raise TypeError("planner returned malformed result")
+                decision = call_result.decision
+                usage = call_result.token_usage
                 if not isinstance(decision, PlannerDecision):
                     raise TypeError("planner returned malformed decision")
+                _record_routing(state, call_result.routing)
             except Exception as exc:  # noqa: BLE001 - ports normalize external failures
                 step.state = AgentState.STOPPED
                 step.error = trace_text(exc)
@@ -248,6 +260,42 @@ class AgentRunner:
                     steps=steps,
                     reason=StopReason.LLM_ERROR,
                     detail=store_error or usage_error,
+                    answer_fallback=True,
+                )
+            now = state.started_at
+            if request.limits.max_time_sec > 0:
+                now, clock_error = self._clock_now()
+                if clock_error:
+                    step.state = AgentState.STOPPED
+                    step.error = clock_error
+                    store_error = self._record_step(request, step)
+                    return self._finish(
+                        request,
+                        state,
+                        answer=DEFAULT_FALLBACK_ANSWER,
+                        sources=sources,
+                        steps=steps,
+                        reason=StopReason.LLM_ERROR,
+                        detail=store_error or clock_error,
+                        answer_fallback=True,
+                    )
+            stop = evaluate_stop(
+                state,
+                include_step_limit=False,
+                now_monotonic=now,
+            )
+            if stop.stop:
+                step.state = AgentState.STOPPED
+                step.error = stop.detail
+                store_error = self._record_step(request, step)
+                return self._finish(
+                    request,
+                    state,
+                    answer=DEFAULT_FALLBACK_ANSWER,
+                    sources=sources,
+                    steps=steps,
+                    reason=stop.reason or StopReason.LLM_ERROR,
+                    detail=store_error or stop.detail,
                     answer_fallback=True,
                 )
 
@@ -579,6 +627,8 @@ class AgentRunner:
                 ((now or state.started_at) - state.started_at) * 1000, 3
             ),
         }
+        if state.model_routes:
+            trace["model_routes"] = list(state.model_routes)
         if clock_error:
             trace["clock_error"] = clock_error
         if extra_trace:
@@ -673,6 +723,18 @@ class AgentRunner:
             return trace_text(exc)
         return ""
 
+    def _reset_planner_run(self) -> str:
+        reset = getattr(self._planner, "reset_run", None)
+        if reset is None:
+            return ""
+        if not callable(reset):
+            return "planner reset_run hook is not callable"
+        try:
+            reset()
+        except Exception as exc:  # noqa: BLE001 - planner lifecycle is a port boundary
+            return trace_text(exc)
+        return ""
+
     def _account_planner_usage(
         self, state: RunState, usage: Mapping[str, int] | None
     ) -> str:
@@ -690,19 +752,84 @@ class AgentRunner:
         return ""
 
 
+def _record_routing(state: RunState, routing: Sequence[PlannerRouting]) -> None:
+    for route in routing:
+        if not isinstance(route, PlannerRouting):
+            raise TypeError("planner returned malformed routing")
+        projection: dict[str, object] = {
+            "model_role": sanitize_identifier(route.model_role, max_chars=80),
+            "model_id": sanitize_identifier(route.model_id, max_chars=80),
+            "backend": sanitize_identifier(route.backend, max_chars=80),
+            "routing_status": sanitize_identifier(
+                route.routing_status, max_chars=80
+            ),
+        }
+        if route.provider_call_id:
+            projection["provider_call_id"] = sanitize_identifier(
+                route.provider_call_id, max_chars=80
+            )
+        state.model_routes.append(projection)
+
+
+def _budget_message(
+    request: RunRequest, state: RunState, *, now_monotonic: float
+) -> Message:
+    limits = request.limits
+    elapsed = max(0.0, now_monotonic - state.started_at)
+    remaining_steps = max(limits.max_steps - state.step_count, 0)
+    remaining_time = (
+        max(limits.max_time_sec - elapsed, 0.0)
+        if limits.max_time_sec > 0
+        else None
+    )
+    remaining_tokens = (
+        max(limits.max_tokens - state.total_tokens, 0)
+        if limits.max_tokens > 0
+        else None
+    )
+    remaining_cost = (
+        max(limits.max_cost_usd - state.total_cost_usd, 0.0)
+        if limits.max_cost_usd > 0
+        else None
+    )
+    return {
+        "role": "runtime_budget",
+        "remaining_steps": remaining_steps,
+        "max_steps": limits.max_steps,
+        "elapsed_sec": round(elapsed, 3),
+        "remaining_time_sec": round(remaining_time, 3)
+        if remaining_time is not None
+        else None,
+        "max_time_sec": limits.max_time_sec,
+        "prompt_tokens": state.prompt_tokens,
+        "completion_tokens": state.completion_tokens,
+        "total_tokens": state.total_tokens,
+        "remaining_tokens": remaining_tokens,
+        "max_tokens": limits.max_tokens,
+        "total_cost_usd": round(state.total_cost_usd, 6),
+        "remaining_cost_usd": round(remaining_cost, 6)
+        if remaining_cost is not None
+        else None,
+        "max_cost_usd": limits.max_cost_usd,
+    }
+
+
 def _add_tokens(state: RunState, usage: Mapping[str, int]) -> None:
-    prompt = _nonnegative_int(usage.get("prompt_tokens"))
-    completion = _nonnegative_int(usage.get("completion_tokens"))
-    total = _nonnegative_int(usage.get("total_tokens")) or prompt + completion
+    prompt = _usage_counter(usage, "prompt_tokens")
+    completion = _usage_counter(usage, "completion_tokens")
+    total = max(_usage_counter(usage, "total_tokens"), prompt + completion)
     state.prompt_tokens += prompt
     state.completion_tokens += completion
     state.total_tokens += total
 
 
-def _nonnegative_int(value: object) -> int:
-    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+def _usage_counter(usage: Mapping[str, int], key: str) -> int:
+    if key not in usage:
+        return 0
+    value = usage[key]
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
         return value
-    return 0
+    raise ValueError("usage counter must be a non-negative integer")
 
 
 def _state_for_stop_reason(reason: StopReason) -> AgentState:

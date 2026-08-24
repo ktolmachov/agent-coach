@@ -537,3 +537,101 @@ Rollback:
 Stop:
 
 - stop after the D8 promotion report. Do not start D9.
+
+## D9 - Provider-Native Function Calling and Model Routing
+
+Status: HOLD pending independent promotion review.
+
+Inputs:
+
+- promoted D8 local-vector retrieval;
+- D7 remains HOLD and is not a D9 blocker;
+- framework-independent Agent Core ports;
+- frozen public tool schemas.
+
+Write-set:
+
+- optional `[live]` extra for the official OpenAI Python SDK;
+- provider config, model router, tool-schema conversion and Responses adapter;
+- live-provider composition root;
+- focused offline tests with a scripted Responses client;
+- adapter-boundary documentation.
+
+Implemented artifacts:
+
+- `src/agent_coach/provider/`;
+- `src/agent_coach/profiles/live.py`;
+- `tests/test_model_router.py`;
+- `tests/test_openai_responses_adapter.py`;
+- `tests/test_live_profile_contract.py`;
+- `docs/live_profile.md`.
+
+Core contract evolution:
+
+- `PlannerPort.decide` now returns `PlannerCallResult` so routing metadata is
+  not stored in `thought`, `raw` or token maps;
+- mock and local-vector planners remain scripted and are unchanged in default
+  behavior;
+- `model_routes` is added to a run trace only when routing metadata exists, so
+  mock golden projections stay stable.
+
+D9 HOLD remediation evidence:
+
+- stateless Responses requests include `reasoning.encrypted_content`;
+- replay preserves valid provider `response.output` and fails closed for
+  oversized, malformed or mismatched replay-critical items;
+- provider response status must be explicit `completed`, and unsafe status
+  values stay out of bounded errors;
+- provider API base validation rejects encoded and double-encoded secret-like
+  paths before public projection;
+- token usage accounting uses at least `prompt_tokens + completion_tokens`
+  even when provider `total_tokens` is lower;
+- no-tool planner responses return to Agent Core before any synthesizer call,
+  so hard token and time limits are rechecked between provider calls;
+- provider output text is bounded locally when the provider ignores
+  `max_output_tokens`;
+- replay diagnostics use static field labels and do not expose
+  provider-controlled mapping keys;
+- remote HTTP API bases are rejected unless the host is loopback for a local
+  emulator;
+- malformed provider and Core port usage counters fail closed instead of being
+  coerced to zero;
+- unsupported provider `response.output` item types fail closed before tool
+  execution;
+- no-tool planner responses are documented and tested as terminal planner
+  answers or abstentions, not synthesizer evidence;
+- stateless replay preserves assistant output item `phase` values unchanged;
+- secret-like API base hostnames are rejected before public projection.
+
+Non-goals:
+
+- no second orchestration loop;
+- no public API/OpenAPI change;
+- no production auth, MCP, write tools or durable provider state;
+- no committed API keys or raw provider dumps;
+- no D10 phase-trace work.
+
+Promotion thresholds:
+
+- provider wire/contract tests pass without network;
+- planner and synthesizer routes use distinct configured model ids;
+- invalid/unknown/multiple native calls fail closed;
+- silent mock fallback is 0;
+- secret exposure is 0;
+- default mock profile does not regress.
+
+Checks:
+
+- targeted provider, router and live-profile tests;
+- one mock-profile regression;
+- Ruff and compileall on the touched surface;
+- import-boundary scan of core and lazy SDK import.
+
+Rollback:
+
+- remove the provider/profile packages, live tests and D9 docs or revert the
+  D9 commit; keep D1-D8 intact.
+
+Stop:
+
+- stop after the D9 promotion report. Do not start D10.

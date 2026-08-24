@@ -26,10 +26,15 @@ Implemented so far:
 - diploma review kit, release checklist, public release gate and deterministic
   demo evidence script.
 - optional in-process local-vector retrieval profile for `rag.search`.
+- optional live-provider profile with official OpenAI Responses function
+  calling and planner/synthesizer routing. The default profile remains
+  deterministic mock.
 
 The Mock API is a deterministic local review surface. It has no production
 auth, no production data and no durable production state. Local-vector
-retrieval is an explicit offline adapter, not the default API profile.
+retrieval is an explicit offline adapter, not the default API profile. The
+optional live-provider profile is a separate in-process composition and is
+not used by the Mock API.
 
 ## Install
 
@@ -74,6 +79,15 @@ Build the in-memory local vector index and run one question through
 python -c "from agent_coach.retrieval import build_local_vector_composition; c = build_local_vector_composition('How does photosynthesis store energy in glucose using chlorophyll?'); r = c.runner.run(c.request); print(r.answer_status, r.sources[0]['file_name'])"
 ```
 
+Optional live-provider extra (not required for CI or the default demo):
+
+```bash
+python -m pip install -e ".[live]"
+```
+
+See [Live provider profile](docs/live_profile.md) for environment variable
+names. Do not put an API key in Git, chat or evidence files.
+
 Or run the diploma demonstration script and emit JSON review evidence:
 
 ```bash
@@ -105,6 +119,7 @@ private source checkout.
 - [Core boundary](docs/core.md)
 - [Mock adapters](docs/mock_adapters.md)
 - [Local vector memory](docs/retrieval.md)
+- [Live provider profile](docs/live_profile.md)
 - [Adapter boundary ADR](docs/adr/0002-diploma-live-adapter-boundary.md)
 - [Demo status](docs/demo.md)
 - [Diploma review kit](docs/review_kit.md)

@@ -31,6 +31,9 @@ curl -s -X POST http://127.0.0.1:8008/v1/runs \
 The exported contract bundle can be reviewed directly at
 `contracts/agent_contracts/v1/agent_contract_bundle.json`.
 
+Optional live-provider wiring is documented in `docs/live_profile.md`. It is
+not part of the default demo path and is not used by the Mock API.
+
 The synthetic mock fixtures live at `fixtures/mock_scenarios.json` for review
 and are also packaged under `agent_coach.data` for wheel installs. They cover
 the predeclared read-only mock tool subset plus controlled outcomes for

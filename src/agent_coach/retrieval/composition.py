@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -11,6 +11,7 @@ from pathlib import Path
 from agent_coach.core import AgentRunner, RunLimits, RunRequest, ToolSpec
 from agent_coach.core.contracts import (
     AgentStep,
+    PlannerCallResult,
     PlannerDecision,
     tool_specs_from_contract_bundle,
 )
@@ -52,18 +53,18 @@ class LocalVectorQuestionPlanner:
         *,
         steps: Sequence[AgentStep],
         tools: Sequence[ToolSpec],
-    ) -> tuple[PlannerDecision, Mapping[str, int]]:
+    ) -> PlannerCallResult:
         del tools
         usage = {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6}
         if not any(step.tool_name == LOCAL_VECTOR_TOOL_NAME for step in steps):
-            return (
-                PlannerDecision(
+            return PlannerCallResult(
+                decision=PlannerDecision(
                     action="tool_call",
                     thought="Retrieve public notes for the learner question.",
                     tool_name=LOCAL_VECTOR_TOOL_NAME,
                     tool_args={"query": _user_question(messages)},
                 ),
-                usage,
+                token_usage=usage,
             )
         search = next(
             (
@@ -75,21 +76,21 @@ class LocalVectorQuestionPlanner:
         )
         excerpt = _safe_excerpt(search)
         if excerpt:
-            return (
-                PlannerDecision(
+            return PlannerCallResult(
+                decision=PlannerDecision(
                     action="final_answer",
                     thought="Cite the retrieved public note.",
                     final_answer=f"{excerpt} [1]",
                 ),
-                usage,
+                token_usage=usage,
             )
-        return (
-            PlannerDecision(
+        return PlannerCallResult(
+            decision=PlannerDecision(
                 action="final_answer",
                 thought="No safe retrieval evidence.",
                 final_answer="I cannot answer from the provided sources.",
             ),
-            usage,
+            token_usage=usage,
         )
 
 

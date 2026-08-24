@@ -8,6 +8,7 @@ framework-independent and does not import HomeTutor runtime modules.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import PurePath
@@ -175,6 +176,26 @@ class PlannerDecision:
     final_answer: str | None = None
     raw: Any = None
     fallback: bool = False
+
+
+@dataclass(frozen=True)
+class PlannerRouting:
+    """Safe model-routing metadata for one provider call."""
+
+    model_role: str
+    model_id: str
+    backend: str
+    routing_status: str
+    provider_call_id: str | None = None
+
+
+@dataclass(frozen=True)
+class PlannerCallResult:
+    """Typed planner port result. Routing metadata is not stored in tokens."""
+
+    decision: PlannerDecision
+    token_usage: Mapping[str, int] | None = None
+    routing: tuple[PlannerRouting, ...] = ()
 
 
 @dataclass(frozen=True)

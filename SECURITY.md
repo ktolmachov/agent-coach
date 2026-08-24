@@ -5,8 +5,10 @@
 The supported public surface is the standalone deterministic diploma demo:
 documentation, exported public contracts, framework-independent Agent Core,
 deterministic mock adapters and a localhost-only Mock Agent API. It contains no
-production authentication, no production data, no provider clients and no
-durable production persistence.
+production authentication, no production data, no committed provider credentials
+and no durable production persistence. An optional live-provider adapter may
+call the official OpenAI SDK when a reviewer supplies a key locally. That
+adapter is not the default demo path.
 
 ## Reporting Issues
 

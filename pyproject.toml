@@ -34,6 +34,9 @@ dev = [
   "pytest>=8,<9",
   "ruff>=0.6,<1",
 ]
+live = [
+  "openai>=1.40,<3",
+]
 
 [tool.setuptools.dynamic]
 version = { attr = "agent_coach.__version__" }

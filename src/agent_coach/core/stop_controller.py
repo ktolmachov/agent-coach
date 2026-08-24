@@ -48,6 +48,7 @@ class RunState:
     started_at: float = field(default_factory=time.monotonic)
     guardrail_triggered: bool = False
     invalid_args_after_repair: bool = False
+    model_routes: list[dict[str, Any]] = field(default_factory=list)
 
     def record_tool_call(self, tool_name: str, args: dict[str, Any]) -> str:
         call_hash = compute_call_hash(tool_name, args)

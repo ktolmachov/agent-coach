@@ -2,7 +2,7 @@
 
 Date: 2026-08-23
 
-Status: Accepted for the D8 local-vector boundary
+Status: Accepted for the D8 local-vector boundary and D9 live-provider adapter
 
 ## Context
 
@@ -26,8 +26,9 @@ Composition roots choose an explicit adapter profile:
 
 - `mock` remains the offline default;
 - `local_vector` uses packaged synthetic notes and real cosine search;
-- a later live-provider profile may add an official SDK behind the same
-  runner and tool port.
+- `live_provider` uses the official OpenAI Python SDK / Responses API behind
+  the same runner and `ToolExecutionPort`. Credentials and SDK imports stay in
+  the adapter/composition layer.
 
 The public `rag.search` schema stays frozen. Threshold, corpus selection and
 index construction are trusted composition concerns.
@@ -39,10 +40,12 @@ index construction are trusted composition concerns.
 - provider SDK in the base install;
 - second orchestration framework;
 - production MCP, auth or durable run state;
-- claiming the hashed embedder is a neural embedding model.
+- claiming the hashed embedder is a neural embedding model;
+- treating a scripted Responses client as a live provider run.
 
 ## Consequences
 
-D8 can prove query -> vector -> similarity -> top-k without network. Later
-live-provider work can attach to the same ports. Reviewers can keep using the
-deterministic mock profile as the regression oracle.
+D8 can prove query -> vector -> similarity -> top-k without network. D9 can
+prove native function calling and two model roles with a scripted official-SDK
+shape, without putting the SDK in the base install. Reviewers can keep using
+the deterministic mock profile as the regression oracle.

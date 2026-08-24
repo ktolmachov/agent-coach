@@ -10,6 +10,7 @@ from typing import Any
 from agent_coach.core.contracts import (
     AgentRunResult,
     AgentStep,
+    PlannerCallResult,
     PlannerDecision,
     RunRequest,
     ToolAccess,
@@ -65,7 +66,7 @@ class DeterministicPlanner:
         *,
         steps: Sequence[AgentStep],
         tools: Sequence[ToolSpec],
-    ) -> tuple[PlannerDecision, Mapping[str, int]]:
+    ) -> PlannerCallResult:
         del messages, steps, tools
         if not self._decisions:
             raise ValueError("deterministic planner script exhausted")
@@ -91,7 +92,7 @@ class DeterministicPlanner:
             raw=None,
             fallback=bool(raw.get("fallback", False)),
         )
-        return decision, dict(token_usage)
+        return PlannerCallResult(decision=decision, token_usage=dict(token_usage))
 
 
 class MockToolAdapter:

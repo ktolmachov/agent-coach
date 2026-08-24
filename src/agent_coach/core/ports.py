@@ -8,7 +8,7 @@ from typing import Protocol, TypeAlias, runtime_checkable
 from agent_coach.core.contracts import (
     AgentRunResult,
     AgentStep,
-    PlannerDecision,
+    PlannerCallResult,
     RunRequest,
     ToolContext,
     ToolResult,
@@ -30,8 +30,8 @@ class PlannerPort(Protocol):
         *,
         steps: Sequence[AgentStep],
         tools: Sequence[ToolSpec],
-    ) -> tuple[PlannerDecision, TokenUsage | None]:
-        """Return one normalized planner decision and optional token usage."""
+    ) -> PlannerCallResult:
+        """Return one normalized decision plus usage and routing metadata."""
 
 
 @runtime_checkable

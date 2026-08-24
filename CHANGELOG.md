@@ -26,6 +26,9 @@
   diploma demonstration evidence script.
 - Offline local-vector retrieval profile with a hashed embedder, in-memory
   cosine store and packaged synthetic diploma knowledge base.
+- Optional live-provider profile using the official OpenAI Python SDK /
+  Responses API, native function calling and planner/synthesizer routing.
+  The SDK is an extra (`[live]`), not a base dependency.
 
 ### Fixed
 

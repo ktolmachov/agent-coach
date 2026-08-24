@@ -18,6 +18,15 @@ small and is declared in `pyproject.toml`.
 | Pytest | Public test suite | MIT |
 | Ruff | Linting | MIT |
 
+## Optional Live Extra
+
+| Package | Purpose | License |
+| --- | --- | --- |
+| OpenAI Python SDK | Optional Responses API adapter for the live-provider profile | Apache-2.0 |
+
+Install with `pip install -e ".[live]"`. The base diploma demo does not need
+this extra. Do not commit API keys.
+
 Transitive dependencies are installed by the Python package resolver and should
 be reviewed from the resolved environment before creating a public release tag.
 No dependency grants production deployment approval for this repository.

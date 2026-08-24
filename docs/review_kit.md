@@ -14,7 +14,8 @@ python scripts/run_diploma_demo.py
 
 Expected result: the demo prints JSON evidence with
 `adapter_profile: "mock"`, `scenario_id: "grounded_success"`,
-`answer_status: "grounded"` and `success: true`.
+`answer_status: "grounded"` and `success: true`. The optional live-provider
+profile is not this review path.
 
 ## Architecture
 

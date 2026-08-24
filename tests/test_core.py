@@ -11,6 +11,7 @@ import pytest
 from agent_coach.core import AgentRunner
 from agent_coach.core.contracts import (
     AgentState,
+    PlannerCallResult,
     PlannerDecision,
     RunLimits,
     RunRequest,
@@ -154,15 +155,23 @@ class ScriptedPlanner:
         *,
         steps: Sequence[object],
         tools: Sequence[ToolSpec],
-    ) -> tuple[PlannerDecision, Mapping[str, int]]:
+    ) -> PlannerCallResult:
         del messages, steps, tools
         if not self._decisions:
             raise AssertionError("planner script exhausted")
-        return self._decisions.pop(0), {
-            "prompt_tokens": 2,
-            "completion_tokens": 3,
-            "total_tokens": 5,
-        }
+        item = self._decisions.pop(0)
+        if isinstance(item, PlannerCallResult):
+            return item
+        if isinstance(item, PlannerDecision):
+            return PlannerCallResult(
+                decision=item,
+                token_usage={
+                    "prompt_tokens": 2,
+                    "completion_tokens": 3,
+                    "total_tokens": 5,
+                },
+            )
+        return item
 
 
 class StaticToolExecutor:
@@ -716,6 +725,113 @@ def test_fake_ports_complete_grounded_run_with_contract_answer_status() -> None:
     assert "chunks" not in result.steps[0].tool_result.data
     assert executor.calls[0][2].run_id == "run-demo"
     assert executor.calls[0][2].user_id == "demo-user"
+
+
+def test_core_counts_inconsistent_total_usage_by_prompt_and_completion() -> None:
+    tool = make_search_tool()
+    planner = ScriptedPlanner(
+        [
+            PlannerCallResult(
+                decision=PlannerDecision(
+                    action="tool_call",
+                    thought="need evidence",
+                    tool_name="rag.search",
+                    tool_args={"query": "photosynthesis", "limit": 3},
+                ),
+                token_usage={
+                    "prompt_tokens": 100,
+                    "completion_tokens": 100,
+                    "total_tokens": 1,
+                },
+            )
+        ]
+    )
+    executor = StaticToolExecutor()
+    runner = AgentRunner(planner=planner, tools=[tool], tool_executor=executor)
+
+    result = runner.run(
+        RunRequest(
+            question="What does photosynthesis do?",
+            run_id="usage-invariant",
+            limits=RunLimits(max_tokens=50),
+        )
+    )
+
+    assert result.stop_reason is StopReason.MAX_TOKENS
+    assert result.trace["total_tokens"] == 200
+    assert executor.calls == []
+
+
+def test_core_rejects_malformed_planner_token_usage() -> None:
+    planner = ScriptedPlanner(
+        [
+            PlannerCallResult(
+                decision=PlannerDecision(
+                    action="final_answer",
+                    final_answer="Malformed usage should not complete.",
+                ),
+                token_usage={
+                    "prompt_tokens": -100,
+                    "completion_tokens": -100,
+                    "total_tokens": 1,
+                },
+            )
+        ]
+    )
+    executor = StaticToolExecutor()
+
+    result = AgentRunner(
+        planner=planner,
+        tools=[make_search_tool()],
+        tool_executor=executor,
+    ).run(RunRequest(question="Bad planner usage", run_id="bad-planner-usage"))
+
+    assert result.stop_reason is StopReason.LLM_ERROR
+    assert result.trace["prompt_tokens"] == 0
+    assert result.trace["completion_tokens"] == 0
+    assert result.trace["total_tokens"] == 0
+    assert executor.calls == []
+
+
+def test_core_rejects_malformed_tool_token_usage() -> None:
+    class MalformedUsageToolExecutor:
+        def execute(
+            self,
+            tool: ToolSpec,
+            args: Mapping[str, object],
+            context: ToolContext,
+        ) -> ToolResult:
+            del tool, args, context
+            return ToolResult.success(
+                {"chunks": [{"text": "Tool usage is malformed."}]},
+                sources=[{"file_name": "usage.md", "cite_index": 1}],
+                token_usage={
+                    "prompt_tokens": 1,
+                    "completion_tokens": True,
+                    "total_tokens": 1,
+                },
+            )
+
+    planner = ScriptedPlanner(
+        [
+            PlannerDecision(
+                action="tool_call",
+                tool_name="rag.search",
+                tool_args={"query": "usage"},
+            )
+        ]
+    )
+
+    result = AgentRunner(
+        planner=planner,
+        tools=[make_search_tool()],
+        tool_executor=MalformedUsageToolExecutor(),
+    ).run(RunRequest(question="Bad tool usage", run_id="bad-tool-usage"))
+
+    assert result.stop_reason is StopReason.TOOL_ERROR_LIMIT
+    assert result.trace["prompt_tokens"] == 2
+    assert result.trace["completion_tokens"] == 3
+    assert result.trace["total_tokens"] == 5
 
 
 def test_run_id_is_required_for_deterministic_core_execution() -> None:
