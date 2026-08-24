@@ -782,21 +782,27 @@ Implemented artifacts:
 
 D11 micro-slice evidence:
 
-- 27 frozen public synthetic cases are present and schema-valid;
+- exactly 27 frozen public synthetic cases are present and schema-valid;
+- suite version, public provenance, frozen non-empty id order and canonical
+  suite hash are enforced before an eval suite can run;
 - KPI thresholds are fixed before any live evidence file is accepted;
 - offline eval gate reports 100% pass rate on non-retrieval-top1 mock, Core,
   local-vector negative and scripted provider-contract golden cases;
 - retrieval top-1 accuracy is measured across positive eval cases and must stay
   at or above 80%;
+- p95 eval runtime is measured around each case with wall-clock timing, not from
+  synthetic runner trace durations;
 - invalid or unknown tool executions, security assertion failures, hidden
   writes and grounded answers without citation must remain 0;
 - active live cost cap with unknown pricing fails closed;
 - generated Tool SOP is derived from current advertised `ToolSpec` values and
   compared to the committed snapshot;
 - offline `gate_status` is separate from `promotion_status`;
-- `promotion_status` remains fail-closed until live evidence, clean worktree
-  state and clean fresh-clone release evidence are all valid; minimal
-  marker-only evidence files are invalid.
+- `promotion_status` remains fail-closed until Git HEAD is available, live
+  evidence, clean worktree state and clean fresh-clone release evidence are all
+  valid and above promotion thresholds; accepted evidence provenance, public
+  artifact labels/digests and command records remain in the final report;
+  minimal marker-only, string-only or oversized evidence files are invalid.
 
 Non-goals:
 
@@ -810,15 +816,22 @@ Non-goals:
 
 Promotion thresholds:
 
-- 20-30 frozen cases present and schema-valid;
+- exactly 27 registered frozen cases present and schema-valid;
+- suite version, provenance, case ids and canonical suite hash match the public
+  registry;
 - offline golden gate 100% on non-retrieval-top1 golden cases;
 - retrieval top-1 at least 80%;
-- live task success at least 80% or explicit
-  `HOLD: live provider evidence unavailable`;
+- live task success at least 80% for promotion or explicit
+  `HOLD: live provider evidence unavailable`; a lower live score blocks
+  promotion without changing offline `gate_status`;
+- Git HEAD/status evidence is available or promotion stays `HOLD`;
 - valid live evidence must bind to HEAD, declare live-provider opt-in, include
-  at least five live cases and public artifact labels;
+  registered evidence provenance, at least five live cases and public
+  `docs/evidence/*.json` artifact labels with SHA-256 digests;
 - valid clean release evidence must bind to HEAD and include PASS/exit-code-0
-  fresh-clone, public release gate and offline eval gate command records;
+  fresh-clone, public release gate and offline eval gate command records with
+  `stdout_sha256` plus registered clean-release evidence provenance;
+- custom suite JSON is capped at 128000 bytes and evidence JSON at 64000 bytes;
 - all security, hidden-write and grounding violations equal 0;
 - README/SOP/evidence drift checks pass;
 - full fresh-clone suite passes before final promotion;

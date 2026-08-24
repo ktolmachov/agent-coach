@@ -178,13 +178,19 @@ Run the D11 eval gate:
 python scripts/run_eval_gate.py
 ```
 
-The gate freezes 27 public synthetic cases and KPI thresholds before any live
-evidence is supplied. It also checks the generated Tool SOP snapshot in
-`docs/tool_sop.md`.
-Promotion remains fail-closed unless live evidence identifies the current
-commit, live-provider opt-in, at least five live cases and public artifact
-labels, and clean release evidence records PASS/exit-code-0 fresh-clone,
-public-release and offline-eval commands.
+The gate freezes the exact registered 27-case public synthetic suite and KPI
+thresholds before any live evidence is supplied. It validates suite version,
+public provenance, frozen id order and canonical hash, and it also checks the
+generated Tool SOP snapshot in `docs/tool_sop.md`.
+Promotion remains fail-closed unless Git HEAD is available, live evidence
+identifies the current commit, live-provider opt-in, registered evidence
+provenance, at least five live cases and public artifact labels with SHA-256
+digests, and clean release evidence records registered provenance plus
+PASS/exit-code-0 fresh-clone, public-release and offline-eval commands with
+`stdout_sha256`. Oversized, marker-only or string-only suite/evidence JSON is
+rejected. Live scores below 80% block promotion without changing offline
+`gate_status`; promotion evidence args or `--require-promotion` make
+`promotion_status` drive the CLI exit code.
 
 Run the full public check sequence:
 

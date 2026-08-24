@@ -396,7 +396,13 @@ def _check_d11_eval_artifacts(repo_root: Path) -> list[str]:
     except (OSError, ValueError) as exc:
         failures.append(f"D11 eval suite is invalid: {exc}")
     expected_sop = build_tool_sop_markdown()
-    actual_sop = (repo_root / "docs" / "tool_sop.md").read_text(encoding="utf-8")
+    try:
+        actual_sop = (repo_root / "docs" / "tool_sop.md").read_text(
+            encoding="utf-8",
+        )
+    except OSError:
+        failures.append("docs/tool_sop.md is missing or unreadable")
+        return failures
     if actual_sop != expected_sop:
         failures.append("docs/tool_sop.md is not current")
     return failures

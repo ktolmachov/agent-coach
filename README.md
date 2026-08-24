@@ -101,14 +101,22 @@ Run the D11 deterministic offline eval gate and Tool SOP drift check:
 
 ```bash
 python scripts/run_eval_gate.py
+python scripts/run_eval_gate.py --require-promotion
 python scripts/run_eval_gate.py --print-tool-sop
 ```
 
 The eval report freezes 27 public synthetic cases before any optional live
-evidence is considered. `gate_status: PASS` means the offline gate passed;
-`promotion_status: HOLD` remains expected until opt-in live evidence, a clean
-worktree and clean fresh-clone release evidence are all present and schema-valid.
-Marker-only evidence files are rejected.
+evidence is considered. The suite loader checks the exact registered
+`suite_version`, public provenance, case ids and canonical suite hash; modified
+external suites fail closed. `gate_status: PASS` means the offline gate passed;
+`promotion_status: HOLD` remains expected until Git is available and opt-in
+live evidence, a clean worktree and clean fresh-clone release evidence are all
+present, schema-valid and above promotion thresholds. Accepted evidence
+provenance, repo-relative artifact labels and SHA-256 digests stay in the
+report; marker-only, string-only or oversized evidence files are rejected.
+Supplying promotion evidence or `--require-promotion` makes `promotion_status`
+control the CLI exit code. `--print-tool-sop` prints the generated SOP and fails
+on snapshot drift without echoing local checkout paths.
 
 The runtime dependencies are limited to the local API layer. Agent Core and mock
 adapter modules remain framework-independent and do not import FastAPI.

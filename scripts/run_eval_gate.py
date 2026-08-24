@@ -10,6 +10,9 @@ from pathlib import Path
 
 from agent_coach.eval import build_tool_sop_markdown, run_eval_suite
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TOOL_SOP_SNAPSHOT = REPO_ROOT / "docs" / "tool_sop.md"
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -40,6 +43,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print generated Tool SOP markdown instead of the eval report.",
     )
+    parser.add_argument(
+        "--require-promotion",
+        action="store_true",
+        help="Return non-zero unless promotion_status is PASS.",
+    )
     return parser
 
 
@@ -47,8 +55,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     _configure_stdout()
     args = build_arg_parser().parse_args(argv)
     if args.print_tool_sop:
-        print(build_tool_sop_markdown(), end="")
+        generated = build_tool_sop_markdown()
+        print(generated, end="")
+        try:
+            snapshot = TOOL_SOP_SNAPSHOT.read_text(encoding="utf-8")
+        except OSError:
+            print("Tool SOP snapshot is unavailable", file=sys.stderr)
+            return 1
+        if generated != snapshot:
+            print("Tool SOP snapshot drift detected", file=sys.stderr)
+            return 1
         return 0
+    promotion_required = bool(
+        args.require_promotion
+        or args.live_evidence is not None
+        or args.clean_release_evidence is not None
+    )
+    if args.output is not None and promotion_required and _is_repo_local(args.output):
+        print(
+            "Promotion reports must be written outside the checkout",
+            file=sys.stderr,
+        )
+        return 2
+
     report = run_eval_suite(
         suite_path=args.suite,
         live_evidence_path=args.live_evidence,
@@ -59,13 +88,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(encoded, encoding="utf-8")
     print(encoded, end="")
-    return 0 if report["gate_status"] == "PASS" else 1
+    status_key = "promotion_status" if promotion_required else "gate_status"
+    return 0 if report[status_key] == "PASS" else 1
 
 
 def _configure_stdout() -> None:
     reconfigure = getattr(sys.stdout, "reconfigure", None)
     if callable(reconfigure):
         reconfigure(encoding="utf-8")
+
+
+def _is_repo_local(path: Path) -> bool:
+    output_path = path.resolve()
+    repo_root = REPO_ROOT.resolve()
+    return output_path == repo_root or repo_root in output_path.parents
 
 
 if __name__ == "__main__":

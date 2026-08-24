@@ -247,6 +247,15 @@ def test_release_gate_rejects_invalid_evidence_file(tmp_path) -> None:
     )
 
 
+def test_d11_eval_artifact_check_reports_missing_tool_sop(tmp_path) -> None:
+    _write_required_files(tmp_path)
+    (tmp_path / "docs" / "tool_sop.md").unlink()
+
+    failures = gate._check_d11_eval_artifacts(tmp_path)
+
+    assert "docs/tool_sop.md is missing or unreadable" in failures
+
+
 def _write_required_files(root: Path) -> None:
     for directory in ("docs", "contracts"):
         (root / directory).mkdir(parents=True, exist_ok=True)

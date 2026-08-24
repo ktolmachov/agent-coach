@@ -6,10 +6,14 @@ and publishes KPI evidence. It is not a second orchestration framework.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import subprocess
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -53,12 +57,19 @@ from agent_coach.retrieval import (
 
 DIPLOMA_EVAL_SCHEMA_VERSION = "agent-coach-diploma-eval/1.0.0"
 DIPLOMA_EVAL_REPORT_SCHEMA_VERSION = "agent-coach-diploma-eval-report/1.0.0"
+DIPLOMA_EVAL_SUITE_VERSION = "1.0.0"
 LIVE_EVIDENCE_SCHEMA_VERSION = "agent-coach-live-eval-evidence/1.0.0"
 CLEAN_RELEASE_EVIDENCE_SCHEMA_VERSION = "agent-coach-clean-release-evidence/1.0.0"
 DEFAULT_EVAL_RESOURCE = "diploma_eval_cases.json"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PASS = "PASS"
 HOLD = "HOLD"
+EXPECTED_CASE_COUNT = 27
+MAX_SUITE_JSON_BYTES = 128_000
+MAX_EVIDENCE_JSON_BYTES = 64_000
+EXPECTED_EVAL_SUITE_SHA256 = (
+    "a33ebd320171da98c5fe7bca09c744c8b2909cdb33507cad43f0d1c4146fdf47"
+)
 EXPECTED_THRESHOLDS = {
     "offline_golden_pass_rate": 1.0,
     "retrieval_top1_min_accuracy": 0.8,
@@ -73,6 +84,55 @@ EXPECTED_THRESHOLDS = {
     "fallback_rate": "publish",
     "abstain_rate": "publish",
 }
+EXPECTED_PROVENANCE = {
+    "classification": "synthetic_public_review_eval",
+    "source": "D11 eval gate micro-slice",
+    "contains_production_data": False,
+    "contains_credentials": False,
+    "contains_learner_data": False,
+    "contains_hometutor_runtime_dependency": False,
+}
+EXPECTED_LIVE_EVIDENCE_PROVENANCE = {
+    "classification": "redacted_live_provider_eval",
+    "contains_credentials": False,
+    "contains_learner_data": False,
+    "contains_hometutor_runtime_dependency": False,
+}
+EXPECTED_CLEAN_RELEASE_EVIDENCE_PROVENANCE = {
+    "classification": "clean_release_review_evidence",
+    "contains_credentials": False,
+    "contains_learner_data": False,
+    "contains_hometutor_runtime_dependency": False,
+}
+EXPECTED_CASE_IDS = (
+    "mock-grounded-success",
+    "mock-empty-cards",
+    "mock-validation-failure",
+    "mock-timeout",
+    "mock-rate-limit",
+    "mock-dependency-failure",
+    "mock-security-failure",
+    "mock-oversized-result",
+    "mock-prompt-injection",
+    "mock-fake-secret",
+    "security-pii-private-path-redaction",
+    "mock-forbidden-identity-arg",
+    "retrieval-q1-photosynthesis",
+    "retrieval-q2-spaced-repetition",
+    "retrieval-q3-testing-effect",
+    "retrieval-q4-active-recall",
+    "retrieval-q5-bloom",
+    "retrieval-q6-cognitive-load",
+    "retrieval-q7-interleaving",
+    "retrieval-q8-elaborative",
+    "retrieval-paraphrase-photosynthesis",
+    "retrieval-paraphrase-flashcards",
+    "retrieval-negative-stock",
+    "core-unknown-tool",
+    "core-step-limit",
+    "provider-malformed-native-call",
+    "live-unknown-pricing-cost-cap",
+)
 
 UNSAFE_MARKERS = (
     "DEMOSECRET",
@@ -82,35 +142,45 @@ UNSAFE_MARKERS = (
     "system prompt",
     "learner@example.test",
 )
+EXPECTED_CLEAN_RELEASE_COMMANDS = {
+    "fresh_clone_suite": "python -m pytest",
+    "public_release_gate": "python scripts/check_public_release.py",
+    "offline_eval_gate": "python scripts/run_eval_gate.py",
+}
 
 
 def load_eval_suite(path: Path | None = None) -> dict[str, Any]:
     """Load and validate the frozen D11 eval suite."""
 
-    raw_text = (
-        resources.files("agent_coach.data")
-        .joinpath(DEFAULT_EVAL_RESOURCE)
-        .read_text(encoding="utf-8")
-        if path is None
-        else path.read_text(encoding="utf-8")
-    )
+    raw_text = _read_eval_suite_text(path)
     suite = json.loads(raw_text)
     if not isinstance(suite, dict):
         raise ValueError("D11 eval suite must be a JSON object")
     if suite.get("schema_version") != DIPLOMA_EVAL_SCHEMA_VERSION:
         raise ValueError("unsupported eval schema version")
+    if suite.get("suite_version") != DIPLOMA_EVAL_SUITE_VERSION:
+        raise ValueError("unsupported D11 eval suite_version")
+    if suite.get("provenance") != EXPECTED_PROVENANCE:
+        raise ValueError("D11 eval provenance must match the public registry")
     cases = suite.get("cases")
-    if not isinstance(cases, list) or not 20 <= len(cases) <= 30:
-        raise ValueError("D11 eval suite must contain 20-30 frozen cases")
+    if not isinstance(cases, list) or len(cases) != EXPECTED_CASE_COUNT:
+        raise ValueError("D11 eval suite must contain exactly 27 frozen cases")
     ids = [str(item.get("id") or "") for item in cases if isinstance(item, dict)]
-    if len(ids) != len(cases) or len(set(ids)) != len(ids):
-        raise ValueError("D11 eval cases must have unique ids")
+    if (
+        len(ids) != len(cases)
+        or any(not item for item in ids)
+        or tuple(ids) != EXPECTED_CASE_IDS
+    ):
+        raise ValueError("D11 eval case ids must match the frozen registry")
     thresholds = suite.get("thresholds")
     if not isinstance(thresholds, dict):
         raise ValueError("D11 eval thresholds are required")
     if thresholds != EXPECTED_THRESHOLDS:
         raise ValueError("D11 eval thresholds must match the frozen KPI config")
     _validate_category_requirements(cases)
+    suite_hash = _canonical_sha256(suite)
+    if suite_hash != EXPECTED_EVAL_SUITE_SHA256:
+        raise ValueError("D11 eval suite must match the registered frozen suite")
     return suite
 
 
@@ -125,18 +195,26 @@ def run_eval_suite(
     suite = load_eval_suite(suite_path)
     cases = suite["cases"]
     thresholds = suite["thresholds"]
-    live_evidence = _load_live_evidence(live_evidence_path)
-    clean_release_evidence = _load_clean_release_evidence(
-        clean_release_evidence_path
+    current_commit = _git_output("rev-parse", "HEAD")
+    status_short, git_status_available = (
+        _git_status_short() if current_commit else ("", False)
     )
-    results = [_evaluate_case(case) for case in cases]
+    git_available = bool(current_commit) and git_status_available
+    live_evidence = _load_live_evidence(
+        live_evidence_path,
+        current_commit=current_commit or None,
+    )
+    clean_release_evidence = _load_clean_release_evidence(
+        clean_release_evidence_path,
+        current_commit=current_commit or None,
+    )
+    results = [_evaluate_case_timed(case) for case in cases]
     metrics = _metrics(results, thresholds=thresholds)
-    worktree_dirty = bool(_git_output("status", "--short"))
+    worktree_dirty = bool(status_short) if git_status_available else False
     threshold_failures = _threshold_failures(
         results,
         metrics=metrics,
         thresholds=thresholds,
-        live_evidence=live_evidence,
     )
     gate_status = PASS if not threshold_failures else HOLD
     promotion_blockers = _promotion_blockers(
@@ -144,14 +222,20 @@ def run_eval_suite(
         worktree_dirty=worktree_dirty,
         live_evidence=live_evidence,
         clean_release_evidence=clean_release_evidence,
+        git_available=git_available,
+        thresholds=thresholds,
     )
     promotion_status = PASS if not promotion_blockers else HOLD
     return {
         "schema_version": DIPLOMA_EVAL_REPORT_SCHEMA_VERSION,
         "repository": "agent-coach",
-        "commit": _git_output("rev-parse", "HEAD") or "unknown",
+        "commit": current_commit or "unknown",
+        "git_available": git_available,
         "worktree_dirty": worktree_dirty,
         "profile": "offline_deterministic",
+        "suite_version": suite["suite_version"],
+        "suite_hash": EXPECTED_EVAL_SUITE_SHA256,
+        "provenance": suite["provenance"],
         "contract_hash": CONTRACT_SCHEMA_HASH,
         "corpus_hash": metrics["corpus_hash"],
         "thresholds": thresholds,
@@ -234,6 +318,14 @@ def _evaluate_case(case: Mapping[str, Any]) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - eval report must stay bounded
         return _case_result(case, passed=False, detail=_safe_error(exc))
     return _case_result(case, passed=False, detail=f"unknown case type: {case_type}")
+
+
+def _evaluate_case_timed(case: Mapping[str, Any]) -> dict[str, Any]:
+    started = time.perf_counter()
+    result = dict(_evaluate_case(case))
+    result["duration_ms"] = round((time.perf_counter() - started) * 1000, 3)
+    result["duration_source"] = "eval_wall_clock"
+    return result
 
 
 def _evaluate_mock_case(case: Mapping[str, Any]) -> dict[str, Any]:
@@ -589,11 +681,10 @@ def _threshold_failures(
     *,
     metrics: Mapping[str, Any],
     thresholds: Mapping[str, Any],
-    live_evidence: Mapping[str, Any],
 ) -> list[str]:
     failures = []
-    if not 20 <= len(results) <= 30:
-        failures.append("case_count_outside_20_30")
+    if len(results) != EXPECTED_CASE_COUNT:
+        failures.append("case_count_not_27")
     if metrics["offline_golden_pass_rate"] != thresholds["offline_golden_pass_rate"]:
         failures.append("offline_golden_pass_rate")
     if metrics["retrieval_top1_accuracy"] < thresholds["retrieval_top1_min_accuracy"]:
@@ -612,12 +703,6 @@ def _threshold_failures(
         failures.append("total_cost_usd")
     if metrics["unknown_pricing_under_active_cap"]:
         failures.append("unknown_pricing_under_active_cap")
-    if (
-        live_evidence["status"] == "available"
-        and live_evidence["task_success_rate"]
-        < thresholds["live_task_success_min_rate"]
-    ):
-        failures.append("live_task_success_rate")
     return failures
 
 
@@ -627,14 +712,23 @@ def _promotion_blockers(
     worktree_dirty: bool,
     live_evidence: Mapping[str, Any],
     clean_release_evidence: Mapping[str, Any],
+    git_available: bool,
+    thresholds: Mapping[str, Any],
 ) -> list[str]:
     blockers = []
     if gate_status != PASS:
         blockers.append("offline_gate_not_passing")
+    if not git_available:
+        blockers.append("git_unavailable")
     if worktree_dirty:
         blockers.append("worktree_dirty")
     if live_evidence.get("status") != "available":
         blockers.append(f"live_evidence_{live_evidence.get('status')}")
+    elif (
+        live_evidence.get("task_success_rate", 0.0)
+        < thresholds["live_task_success_min_rate"]
+    ):
+        blockers.append("live_evidence_below_threshold")
     if clean_release_evidence.get("status") != "available":
         blockers.append(
             f"clean_release_evidence_{clean_release_evidence.get('status')}"
@@ -724,15 +818,15 @@ def _validation_summary(schema: Mapping[str, Any]) -> str:
 def _limits_summary(limits: Mapping[str, Any]) -> str:
     if not limits:
         return (
-            "Runner step/time/token/cost limits apply; provider retries are "
-            "adapter-bound."
+            "No per-tool limits declared in ToolSpec. Runner budgets still apply; "
+            "retry policy is not declared in ToolSpec."
         )
     declared = "; ".join(
         f"{key}={value}" for key, value in sorted(limits.items())
     )
     return (
-        f"Declared tool limits: {declared}. Runner step/time/token/cost "
-        "budgets apply; provider retries stay adapter-bound."
+        f"Declared ToolSpec limits: {declared}. Runner budgets still apply; "
+        "retry policy is not declared in ToolSpec."
     )
 
 
@@ -762,10 +856,10 @@ def _error_summary(tool: ToolSpec) -> str:
     effect = "read-only" if tool.is_read_only else "write approval required"
     idempotency = "idempotent" if tool.idempotent else "not idempotent"
     return (
-        f"Contract effect is {effect}; {idempotency}. Schema validation, "
-        "harness-field rejection, timeout, rate-limit, dependency and security "
-        "failures are bounded; result projections redact raw secrets, private "
-        "paths and prompt-injection text."
+        f"ToolSpec declares access={effect} and {idempotency}. Error categories "
+        "and retry semantics are not declared in ToolSpec; core validation "
+        "rejects malformed or harness-owned args, and security projection "
+        "redacts raw secrets, private paths and prompt-injection text."
     )
 
 
@@ -773,7 +867,11 @@ def _cell(value: str) -> str:
     return " ".join(value.replace("|", "\\|").split())
 
 
-def _load_live_evidence(path: Path | None) -> dict[str, Any]:
+def _load_live_evidence(
+    path: Path | None,
+    *,
+    current_commit: str | None,
+) -> dict[str, Any]:
     if path is None:
         return {
             "status": "unavailable",
@@ -782,21 +880,29 @@ def _load_live_evidence(path: Path | None) -> dict[str, Any]:
             "reason": "no opt-in live evidence file supplied",
         }
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = json.loads(
+            _read_limited_text(path, max_bytes=MAX_EVIDENCE_JSON_BYTES)
+        )
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
         return _invalid_evidence("live", exc)
     if not isinstance(payload, dict):
         return _invalid_evidence("live", "payload is not an object")
     if payload.get("schema_version") != LIVE_EVIDENCE_SCHEMA_VERSION:
         return _invalid_evidence("live", "unexpected schema_version")
-    if payload.get("commit") != (_git_output("rev-parse", "HEAD") or "unknown"):
+    provenance = payload.get("provenance")
+    if provenance != EXPECTED_LIVE_EVIDENCE_PROVENANCE:
+        return _invalid_evidence("live", "provenance does not match live registry")
+    if current_commit is None:
+        return _invalid_evidence("live", "git HEAD is unavailable")
+    if payload.get("commit") != current_commit:
         return _invalid_evidence("live", "commit does not match HEAD")
     if payload.get("profile") != "live_provider":
         return _invalid_evidence("live", "profile must be live_provider")
     if payload.get("provider_profile_opt_in") is not True:
         return _invalid_evidence("live", "provider opt-in marker missing")
-    if not _non_empty_string(payload.get("checked_at_utc")):
-        return _invalid_evidence("live", "checked_at_utc is required")
+    checked_at_utc = _utc_timestamp(payload.get("checked_at_utc"))
+    if checked_at_utc is None:
+        return _invalid_evidence("live", "checked_at_utc must be ISO UTC")
     case_count = payload.get("case_count")
     if (
         isinstance(case_count, bool)
@@ -807,24 +913,32 @@ def _load_live_evidence(path: Path | None) -> dict[str, Any]:
     task_success_rate = _bounded_rate_value(payload.get("task_success_rate"))
     if task_success_rate is None:
         return _invalid_evidence("live", "task_success_rate must be in [0, 1]")
-    artifacts = payload.get("evidence_artifacts")
-    if not (
-        isinstance(artifacts, list)
-        and artifacts
-        and all(_non_empty_public_string(item) for item in artifacts)
-    ):
-        return _invalid_evidence("live", "public evidence_artifacts are required")
+    artifacts = _public_evidence_artifacts(payload.get("evidence_artifacts"))
+    if not artifacts:
+        return _invalid_evidence(
+            "live",
+            "public evidence_artifacts with SHA-256 are required",
+        )
     return {
         "status": "available",
         "required_for_promotion": True,
         "task_success_rate": task_success_rate,
         "case_count": case_count,
         "commit": payload["commit"],
+        "profile": payload["profile"],
+        "provider_profile_opt_in": True,
+        "checked_at_utc": checked_at_utc,
+        "evidence_artifacts": artifacts,
+        "provenance": provenance,
         "evidence_schema_version": LIVE_EVIDENCE_SCHEMA_VERSION,
     }
 
 
-def _load_clean_release_evidence(path: Path | None) -> dict[str, Any]:
+def _load_clean_release_evidence(
+    path: Path | None,
+    *,
+    current_commit: str | None,
+) -> dict[str, Any]:
     if path is None:
         return {
             "status": "unavailable",
@@ -832,28 +946,35 @@ def _load_clean_release_evidence(path: Path | None) -> dict[str, Any]:
             "reason": "no clean release evidence file supplied",
         }
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = json.loads(
+            _read_limited_text(path, max_bytes=MAX_EVIDENCE_JSON_BYTES)
+        )
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
         return _invalid_evidence("clean_release", exc)
     if not isinstance(payload, dict):
         return _invalid_evidence("clean_release", "payload is not an object")
     if payload.get("schema_version") != CLEAN_RELEASE_EVIDENCE_SCHEMA_VERSION:
         return _invalid_evidence("clean_release", "unexpected schema_version")
-    if payload.get("commit") != (_git_output("rev-parse", "HEAD") or "unknown"):
+    provenance = payload.get("provenance")
+    if provenance != EXPECTED_CLEAN_RELEASE_EVIDENCE_PROVENANCE:
+        return _invalid_evidence(
+            "clean_release",
+            "provenance does not match clean release registry",
+        )
+    if current_commit is None:
+        return _invalid_evidence("clean_release", "git HEAD is unavailable")
+    if payload.get("commit") != current_commit:
         return _invalid_evidence("clean_release", "commit does not match HEAD")
     if payload.get("worktree_dirty") is not False:
         return _invalid_evidence("clean_release", "worktree must be clean")
-    if not _non_empty_string(payload.get("checked_at_utc")):
-        return _invalid_evidence("clean_release", "checked_at_utc is required")
+    checked_at_utc = _utc_timestamp(payload.get("checked_at_utc"))
+    if checked_at_utc is None:
+        return _invalid_evidence("clean_release", "checked_at_utc must be ISO UTC")
     commands = payload.get("commands")
     if not isinstance(commands, Mapping):
         return _invalid_evidence("clean_release", "commands object is required")
-    required_commands = (
-        "fresh_clone_suite",
-        "public_release_gate",
-        "offline_eval_gate",
-    )
-    for command_name in required_commands:
+    command_records: dict[str, dict[str, object]] = {}
+    for command_name, expected_command in EXPECTED_CLEAN_RELEASE_COMMANDS.items():
         command = commands.get(command_name)
         if not isinstance(command, Mapping):
             return _invalid_evidence(
@@ -863,14 +984,28 @@ def _load_clean_release_evidence(path: Path | None) -> dict[str, Any]:
             return _invalid_evidence(
                 "clean_release", f"{command_name} did not pass"
             )
-        if not _non_empty_public_string(command.get("command")):
+        if command.get("command") != expected_command:
             return _invalid_evidence(
-                "clean_release", f"{command_name} command text missing"
+                "clean_release", f"{command_name} command does not match registry"
             )
+        stdout_sha256 = _sha256_hex(command.get("stdout_sha256"))
+        if stdout_sha256 is None:
+            return _invalid_evidence(
+                "clean_release", f"{command_name} stdout_sha256 is required"
+            )
+        command_records[command_name] = {
+            "command": expected_command,
+            "exit_code": 0,
+            "status": PASS,
+            "stdout_sha256": stdout_sha256,
+        }
     return {
         "status": "available",
         "required_for_promotion": True,
         "commit": payload["commit"],
+        "checked_at_utc": checked_at_utc,
+        "commands": command_records,
+        "provenance": provenance,
         "evidence_schema_version": CLEAN_RELEASE_EVIDENCE_SCHEMA_VERSION,
     }
 
@@ -919,8 +1054,63 @@ def _non_empty_public_string(value: object) -> bool:
             "[REDACTED_BEARER]",
             "[REDACTED_EMAIL]",
             "[REDACTED_IDENTIFIER]",
+            "[REDACTED_UNSAFE_TOOL_TEXT]",
         )
     )
+
+
+def _utc_timestamp(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text.endswith("Z"):
+        return None
+    try:
+        parsed = datetime.fromisoformat(text[:-1] + "+00:00")
+    except ValueError:
+        return None
+    if parsed.utcoffset() != UTC.utcoffset(None):
+        return None
+    return parsed.astimezone(UTC).replace(microsecond=0).isoformat().replace(
+        "+00:00",
+        "Z",
+    )
+
+
+def _public_evidence_artifacts(value: object) -> list[dict[str, str]] | None:
+    if not isinstance(value, list) or not value:
+        return None
+    artifacts: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            return None
+        label = _public_evidence_label(item.get("label"))
+        digest = _sha256_hex(item.get("sha256"))
+        if label is None or digest is None:
+            return None
+        artifacts.append({"label": label, "sha256": digest})
+    return artifacts
+
+
+def _public_evidence_label(value: object) -> str | None:
+    if not _non_empty_public_string(value):
+        return None
+    label = "/".join(str(value).strip().replace("\\", "/").split("/"))
+    path = Path(label)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    if path.parts[:2] != ("docs", "evidence") or path.suffix != ".json":
+        return None
+    return label
+
+
+def _sha256_hex(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    digest = value.strip().lower()
+    if len(digest) == 64 and all(char in "0123456789abcdef" for char in digest):
+        return digest
+    return None
 
 
 def _validate_category_requirements(cases: Sequence[object]) -> None:
@@ -1002,8 +1192,37 @@ def _p95(values: Sequence[float]) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
-    index = min(len(ordered) - 1, int(0.95 * (len(ordered) - 1)))
+    index = min(len(ordered) - 1, max(0, math.ceil(0.95 * len(ordered)) - 1))
     return round(ordered[index], 3)
+
+
+def _read_eval_suite_text(path: Path | None) -> str:
+    if path is not None:
+        return _read_limited_text(path, max_bytes=MAX_SUITE_JSON_BYTES)
+    resource = resources.files("agent_coach.data").joinpath(DEFAULT_EVAL_RESOURCE)
+    data = resource.read_bytes()
+    if len(data) > MAX_SUITE_JSON_BYTES:
+        raise ValueError("D11 eval suite JSON exceeds the size limit")
+    return data.decode("utf-8")
+
+
+def _read_limited_text(path: Path, *, max_bytes: int) -> str:
+    if path.stat().st_size > max_bytes:
+        raise ValueError("JSON file exceeds the size limit")
+    data = path.read_bytes()
+    if len(data) > max_bytes:
+        raise ValueError("JSON file exceeds the size limit")
+    return data.decode("utf-8")
+
+
+def _canonical_sha256(value: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _git_output(*args: str) -> str:
@@ -1016,6 +1235,19 @@ def _git_output(*args: str) -> str:
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return ""
+
+
+def _git_status_short() -> tuple[str, bool]:
+    try:
+        output = subprocess.check_output(
+            ["git", "status", "--short"],
+            cwd=REPO_ROOT,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "", False
+    return output, True
 
 
 class StaticPlanner:
