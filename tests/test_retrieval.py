@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_coach.core.contracts import ToolContext
+from agent_coach.core.contracts import AgentPhase, ToolContext
 from agent_coach.core.security import DefaultSecurityPolicy
 from agent_coach.mock import build_mock_composition
 from agent_coach.retrieval import (
@@ -442,6 +442,22 @@ def test_agent_runner_uses_local_vector_rag_search() -> None:
     assert "[1]" in result.answer
     lowered = result.answer.casefold()
     assert "glucose" in lowered or "chlorophyll" in lowered
+    phases = result.trace["phases"]
+    assert [phase["name"] for phase in phases] == [phase.value for phase in AgentPhase]
+    scenario_phase = next(
+        phase for phase in phases if phase["name"] == "scenario_selection"
+    )
+    retrieval_phase = next(
+        phase for phase in phases if phase["name"] == "knowledge_retrieval"
+    )
+    assert scenario_phase["status"] == "skipped"
+    assert scenario_phase["detail"] == "profile_without_scenario"
+    assert retrieval_phase["status"] == "completed"
+    assert retrieval_phase["step_ids"] == [0]
+    assert retrieval_phase["retrieval"]["hit_count"] == 1
+    assert retrieval_phase["retrieval"]["selected_chunk_count"] == 1
+    assert retrieval_phase["retrieval"]["has_grounding_evidence"] is True
+    assert retrieval_phase["retrieval"]["citation_present"] is True
 
 
 def test_weak_retrieval_through_agent_runner_abstains() -> None:
@@ -458,6 +474,14 @@ def test_weak_retrieval_through_agent_runner_abstains() -> None:
     assert result.steps[0].tool_result.meta["hit_count"] == 0
     assert result.answer_status == "abstain"
     assert result.success is False
+    retrieval_phase = next(
+        phase
+        for phase in result.trace["phases"]
+        if phase["name"] == "knowledge_retrieval"
+    )
+    assert retrieval_phase["status"] == "failed"
+    assert retrieval_phase["detail"] == "no_grounding_evidence"
+    assert retrieval_phase["retrieval"]["hit_count"] == 0
 
 
 def test_unicode_query_can_retrieve_photosynthesis() -> None:

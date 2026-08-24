@@ -6,10 +6,12 @@ from types import SimpleNamespace
 import pytest
 
 from agent_coach.core.contracts import (
+    AgentPhase,
     AgentState,
     AgentStep,
     RunLimits,
     RunRequest,
+    StopReason,
     ToolAccess,
     ToolContext,
     ToolResult,
@@ -158,6 +160,19 @@ class RecordingExecutor:
                 sources=[],
             )
         return ToolResult.failure(f"unknown tool {tool.name}")
+
+
+class PricedRecordingExecutor(RecordingExecutor):
+    def execute(
+        self,
+        tool: ToolSpec,
+        args: dict[str, object],
+        context: ToolContext,
+    ) -> ToolResult:
+        result = super().execute(tool, args, context)
+        if result.ok:
+            result.meta["estimated_cost_usd"] = 0.25
+        return result
 
 
 def test_tool_schemas_are_sent_in_provider_function_shape() -> None:
@@ -1539,9 +1554,195 @@ def test_usage_from_planner_and_synthesizer_is_summed_once() -> None:
     assert result.trace["total_cost_usd"] is None
     roles = [item["model_role"] for item in result.trace["model_routes"]]
     assert roles == ["planner", "synthesizer"]
+    assert [item["step_id"] for item in result.trace["model_routes"]] == [0, 1]
     assert {item["model_id"] for item in result.trace["model_routes"]} == {
         PLANNER_MODEL,
         SYNTHESIZER_MODEL,
+    }
+    phases = result.trace["phases"]
+    assert [phase["name"] for phase in phases] == [phase.value for phase in AgentPhase]
+    retrieval_phase = next(
+        phase for phase in phases if phase["name"] == "knowledge_retrieval"
+    )
+    final_phase = next(
+        phase for phase in phases if phase["name"] == "final_validation"
+    )
+    assert retrieval_phase["model_roles"] == ["planner"]
+    assert retrieval_phase["provider_call_ids"] == ["call_1"]
+    assert retrieval_phase["cost"]["cost_status"] == "unknown"
+    assert final_phase["model_roles"] == ["synthesizer"]
+    assert final_phase["cost"]["cost_status"] == "unknown"
+    assert executor.calls == [("rag.search", {"query": "chlorophyll"})]
+
+
+def test_live_provider_failure_before_routes_keeps_unknown_cost_status() -> None:
+    class APITimeoutError(Exception):
+        pass
+
+    runner = AgentRunner(
+        planner=OpenAIResponsesPlanner(
+            _config(), ScriptedResponsesClient([APITimeoutError("timeout")])
+        ),
+        tools=(_search_tool(),),
+        tool_executor=RecordingExecutor(),
+        security_policy=DefaultSecurityPolicy(),
+    )
+
+    result = runner.run(
+        RunRequest(
+            question="How does chlorophyll capture light?",
+            run_id="live-timeout",
+            query_options={"adapter_profile": "live_provider"},
+        )
+    )
+
+    assert result.stop_reason is StopReason.LLM_ERROR
+    assert result.trace["model_routes"] == [
+        {
+            "step_id": 0,
+            "model_role": "planner",
+            "model_id": PLANNER_MODEL,
+            "backend": "openai_responses",
+            "routing_status": "distinct_models",
+        }
+    ]
+    assert result.trace["cost_status"] == "unknown"
+    assert result.trace["total_cost_usd"] is None
+    phases = {phase["name"]: phase for phase in result.trace["phases"]}
+    assert phases["scenario_selection"]["status"] == "skipped"
+    assert phases["scenario_selection"]["detail"] == "profile_without_scenario"
+    assert phases["knowledge_retrieval"]["status"] == "failed"
+    assert phases["knowledge_retrieval"]["detail"] == "planner_error"
+    assert phases["knowledge_retrieval"]["step_ids"] == [0]
+    assert phases["knowledge_retrieval"]["model_roles"] == ["planner"]
+    assert phases["knowledge_retrieval"]["provider_call_ids"] == []
+    assert phases["knowledge_retrieval"]["cost"] == {
+        "total_cost_usd": None,
+        "cost_status": "unknown",
+    }
+    assert phases["final_validation"]["status"] == "skipped"
+    assert phases["final_validation"]["cost"] == {
+        "total_cost_usd": 0.0,
+        "cost_status": "local_zero",
+    }
+
+
+def test_live_provider_failure_without_request_marker_keeps_cloud_cost_status() -> None:
+    class APITimeoutError(Exception):
+        pass
+
+    runner = AgentRunner(
+        planner=OpenAIResponsesPlanner(
+            _config(), ScriptedResponsesClient([APITimeoutError("timeout")])
+        ),
+        tools=(_search_tool(),),
+        tool_executor=RecordingExecutor(),
+        security_policy=DefaultSecurityPolicy(),
+    )
+
+    result = runner.run(
+        RunRequest(
+            question="How does chlorophyll capture light?",
+            run_id="live-timeout-unmarked",
+        )
+    )
+
+    assert result.stop_reason is StopReason.LLM_ERROR
+    assert result.trace["cost_status"] == "unknown"
+    assert result.trace["total_cost_usd"] is None
+    route = result.trace["model_routes"][0]
+    assert route["backend"] == "openai_responses"
+    assert "provider_call_id" not in route
+    phases = {phase["name"]: phase for phase in result.trace["phases"]}
+    assert phases["knowledge_retrieval"]["status"] == "failed"
+    assert phases["knowledge_retrieval"]["cost"] == {
+        "total_cost_usd": None,
+        "cost_status": "unknown",
+    }
+
+
+def test_failed_provider_response_preserves_safe_usage_and_phase_route() -> None:
+    runner = AgentRunner(
+        planner=OpenAIResponsesPlanner(
+            _config(),
+            ScriptedResponsesClient(
+                [
+                    NormalizedResponse(
+                        response_id="resp_failed",
+                        status="failed",
+                        error="server_error",
+                        prompt_tokens=11,
+                        completion_tokens=7,
+                        total_tokens=18,
+                    )
+                ]
+            ),
+        ),
+        tools=(_search_tool(),),
+        tool_executor=RecordingExecutor(),
+        security_policy=DefaultSecurityPolicy(),
+    )
+
+    result = runner.run(
+        RunRequest(
+            question="How does chlorophyll capture light?",
+            run_id="live-failed-usage",
+        )
+    )
+
+    assert result.stop_reason is StopReason.LLM_ERROR
+    assert result.trace["prompt_tokens"] == 11
+    assert result.trace["completion_tokens"] == 7
+    assert result.trace["total_tokens"] == 18
+    assert result.trace["cost_status"] == "unknown"
+    assert result.trace["model_routes"][0]["provider_call_id"] == "resp_failed"
+    phases = {phase["name"]: phase for phase in result.trace["phases"]}
+    retrieval = phases["knowledge_retrieval"]
+    assert retrieval["status"] == "failed"
+    assert retrieval["detail"] == "planner_error"
+    assert retrieval["usage"] == {
+        "prompt_tokens": 11,
+        "completion_tokens": 7,
+        "total_tokens": 18,
+    }
+    assert retrieval["provider_call_ids"] == ["resp_failed"]
+    assert phases["final_validation"]["status"] == "skipped"
+
+
+def test_live_unknown_model_pricing_dominates_priced_tool_usage() -> None:
+    client = ScriptedResponsesClient(
+        [
+            _tool_call("rag.search", {"query": "chlorophyll"}),
+            _text("Chlorophyll captures light [1]."),
+        ]
+    )
+    executor = PricedRecordingExecutor()
+    runner = AgentRunner(
+        planner=OpenAIResponsesPlanner(_config(), client),
+        tools=(_search_tool(),),
+        tool_executor=executor,
+        security_policy=DefaultSecurityPolicy(),
+    )
+
+    result = runner.run(
+        RunRequest(
+            question="How does chlorophyll capture light?",
+            run_id="live-partial-cost",
+            query_options={"adapter_profile": "live_provider"},
+        )
+    )
+
+    assert result.trace["cost_status"] == "unknown"
+    assert result.trace["total_cost_usd"] is None
+    assert result.steps[0].estimated_cost_usd == 0.25
+    retrieval_phase = next(
+        phase
+        for phase in result.trace["phases"]
+        if phase["name"] == "knowledge_retrieval"
+    )
+    assert retrieval_phase["cost"] == {
+        "total_cost_usd": None,
+        "cost_status": "unknown",
     }
     assert executor.calls == [("rag.search", {"query": "chlorophyll"})]
 

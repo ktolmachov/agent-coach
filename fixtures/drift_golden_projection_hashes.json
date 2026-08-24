@@ -1,17 +1,17 @@
 {
   "canonicalization": "json.dumps(sort_keys=True,separators=(comma,colon),ensure_ascii=False) over _result_projection",
   "scenarios": {
-    "dependency_failure": "eac795d68c44420b1238063381cfadf1ac1ac3aa08f2a9c8699728f6667e6c27",
-    "empty_cards": "c0525f709a1c66936a8fad1eb1c93326577e5386ef365ee46098bf10676c29ba",
-    "fake_secret": "459f94cb530ea70515f38526e879b055a1f7cad5a616216e14e65ecb325165b6",
-    "forbidden_identity_arg": "4eddc12fc250b1ceb9efa9a940b5780f0714932a1b125abb79573f41e92bc40a",
-    "grounded_success": "ad3b6d800a73a1e5b7be168dce027ad780b81c424f1015b2d4e99bbdb4f9984e",
-    "oversized_result": "b18335e814801359e223c8924821d319222b32334f33c568cec49edafab62d1c",
-    "prompt_injection": "8e79c6c5040ba6e751f17e761fd93240b54b36e3f014a716ec4ea51f91f1e6d9",
-    "rate_limit": "37440f99608656a13decf767ebd08606d0aa9a9f5ca85bd826f7edbf1159dca5",
-    "security_failure": "be5b5620739029433b08c4d4a235b23880d03556fb97fb174a62a2f1ad243621",
-    "timeout": "ba6b64e4a9e731b6eedfad2e80189b919775ca0d8b2d38b0757d202ff14d16b2",
-    "validation_failure": "2002b720ab80dc31edb6d66124b9f3392c642ab59380fa5398fc4fccae0d4284"
+    "dependency_failure": "b8bb2d2c744ec545d3489fd980d0af99fde39157bdc0314054e7ce92a6e85170",
+    "empty_cards": "f7850d2e3973a3f6376258e0e433b0c164c0497080512ec023876e370d7fb236",
+    "fake_secret": "20b3758db162501a88477a631a3af35522a0756a1d60745573c974fc4abdd7bf",
+    "forbidden_identity_arg": "4cf330f417a4e88e13507b63ca9eaae6b6129630b17302068218cfc60a783c4c",
+    "grounded_success": "29316a4b6fd497d7870864539dad395ccd57c62ef5fe650d740c3971462cedc2",
+    "oversized_result": "f1a550d5ca90d720253a49d2edb87da96ac52254e0907342b8a9cfabb294710f",
+    "prompt_injection": "8ce657cffa2a4c95d3672a1c9c1003a801af6764d83641b96d12ca32e9a0bd7b",
+    "rate_limit": "fdf0ac19fdfd8bca479bf5d880ddb76be715c88c7e0cb21dc9a853f18659371e",
+    "security_failure": "c7d203de86e663a548af5770413f2735785e3076a2d5b7aa2f11772dadd6bd86",
+    "timeout": "4e864a23f202b5f4c5346ccb4985e75c9fef35261daaca3bc6548cd4790e8592",
+    "validation_failure": "98c0947b78629dd474072d90b50814b78a6e5d04c199fcc0c44811977879b529"
   },
   "schema_version": "agent-coach-drift-golden-projection-hashes/1.0.0"
 }

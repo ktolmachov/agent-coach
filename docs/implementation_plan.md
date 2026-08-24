@@ -540,7 +540,7 @@ Stop:
 
 ## D9 - Provider-Native Function Calling and Model Routing
 
-Status: COMPLETE locally; HOLD pending independent promotion review.
+Status: complete.
 
 Inputs:
 
@@ -572,8 +572,7 @@ Core contract evolution:
   not stored in `thought`, `raw` or token maps;
 - mock and local-vector planners remain scripted and are unchanged in default
   behavior;
-- `model_routes` is added to a run trace only when routing metadata exists, so
-  mock golden projections stay stable.
+- `model_routes` is added to a run trace only when routing metadata exists.
 
 D9 completion evidence:
 
@@ -617,6 +616,12 @@ D9 completion evidence:
   values;
 - secret-like API base hostnames are rejected before public projection.
 
+D9 promotion evidence:
+
+- user reported `D9 promoted` on 2026-08-24 and explicitly authorized D10;
+- D10 may proceed from the current repository source of truth;
+- D7 remains HOLD and is not a D10 blocker.
+
 Non-goals:
 
 - no second orchestration loop;
@@ -648,4 +653,95 @@ Rollback:
 
 Stop:
 
-- stop after the D9 promotion report. Do not start D10.
+- stop after the D9 promotion report.
+
+## D10 - Stable Phase Trace, Metrics and Grounding Proof
+
+Status: complete.
+
+Inputs:
+
+- promoted D8 local-vector retrieval;
+- promoted D9 provider-native routing/function-calling adapter;
+- existing Agent Core runner, stop controller, grounding contract and trace
+  projection.
+
+Write-set:
+
+- Core trace projection derived from existing `AgentRunner` steps;
+- focused Core, local-vector and fake-live tests;
+- drift golden projection hashes for the changed public trace shape;
+- Core documentation for phase semantics.
+
+Implemented artifacts:
+
+- stable `trace["phases"]` order:
+  `scenario_selection`, `learner_context`, `knowledge_retrieval`,
+  `practice_branch`, `final_validation`;
+- phase `status` values: `completed`, `skipped`, `failed`;
+- safe phase details, step ids, deterministic tool-call ids, tool names,
+  model roles, provider call ids, timing, usage and cost summaries;
+- safe `trace["grounding"]` summary;
+- local-zero versus unknown cloud cost projection;
+- retrieval phase summaries with counts and grounding/citation booleans, no
+  raw chunks.
+
+D10 completion evidence:
+
+- phases are derived from actual completed steps and terminal result state, not
+  a separate orchestration state machine;
+- unexecuted phases are skipped, not completed;
+- failed tool phases are marked failed and final validation is skipped when no
+  final answer was reached;
+- weak retrieval/no grounding evidence fails the retrieval phase and cannot
+  produce a grounded answer;
+- grounded answers require retrieval evidence plus citation according to the
+  existing answer-status contract;
+- provider `model_routes` now include `step_id` for phase correlation;
+- phase usage/cost deltas are computed from the run-state source of truth, so
+  metrics are not double counted.
+
+D10 HOLD remediation evidence:
+
+- trusted `adapter_profile=live_provider` marks the run as unpriced cloud
+  before the first provider call, so provider timeout/rate-limit/malformed
+  failures cannot project `local_zero`;
+- unknown cloud pricing dominates partially known local tool estimates in the
+  top-level trace and in the specific phase summaries that contain cloud
+  routes;
+- `scenario_selection` is completed only when the trusted request context
+  contains a safe `scenario_id`; local-vector, live-provider and direct Core
+  runs without scenario evidence are skipped.
+
+Non-goals:
+
+- no second orchestration loop;
+- no public API route change;
+- no provider network smoke;
+- no D11 eval gate, SOP, fresh-clone evidence, release tag or deployment work.
+
+Promotion thresholds:
+
+- stable five-phase ordering for mock, local-vector and fake-live profiles;
+- false completed phases: 0 in focused tests;
+- grounded without retrieval citation: 0 in focused tests;
+- metric double counting: 0 in focused tests;
+- raw provider response/raw retrieved chunk leakage: 0 in public projections;
+- touched contract/API regressions: 0.
+
+Checks:
+
+- focused Core, retrieval, provider and profile tests;
+- drift gate after golden projection update;
+- Ruff and compileall on touched Python paths;
+- public release gate for release-surface safety;
+- `git diff --check`.
+
+Rollback:
+
+- remove the D10 trace projection additions, focused tests, updated golden
+  hashes and D10 documentation; keep D1-D9 intact.
+
+Stop:
+
+- stop after the D10 promotion report. Do not start D11.

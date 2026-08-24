@@ -64,7 +64,31 @@ core only through explicit ports. Core tests still use in-test fake ports to
 characterize the port contract without coupling core behavior to fixtures.
 
 D9 adds a typed `PlannerCallResult` so live adapters can return routing
-metadata (`model_role`, `model_id`, `backend`, `routing_status`) without
-hiding it in `thought`, `raw` or token maps. Deterministic mock and
-local-vector planners return an empty routing tuple, so their traces stay
-unchanged.
+metadata (`step_id`, `model_role`, `model_id`, `backend`, `routing_status`)
+without hiding it in `thought`, `raw` or token maps. Deterministic mock and
+local-vector planners return an empty routing tuple.
+
+D10 adds a stable `trace["phases"]` projection derived from the same
+`AgentRunner` steps. It always appears in this order:
+
+1. `scenario_selection`;
+2. `learner_context`;
+3. `knowledge_retrieval`;
+4. `practice_branch`;
+5. `final_validation`.
+
+Each phase contains only safe bounded fields: `status`, `detail`,
+deterministic step-based start, `duration_ms`, `step_ids`, `tool_call_ids`,
+`tool_names`, model roles/provider call ids when present, usage and cost
+summaries. The retrieval phase contains counts and grounding booleans, not raw
+chunks. A retrieval phase is completed only when a retrieval tool produced
+usable grounding evidence; weak retrieval is marked failed and final answers
+without retrieval citations abstain by the existing answer-status contract.
+`scenario_selection` is completed only for explicit scenario-backed requests
+with a safe `scenario_id`; local-vector, live-provider and direct Core requests
+without a scenario selector mark it skipped. Local non-provider runs report
+`cost_status: "local_zero"` with `total_cost_usd: 0.0`; unpriced
+live-provider requests and cloud-backed phase routes report
+`cost_status: "unknown"` and never project a false zero, even when a local tool
+reports a partial estimated cost. Skipped phases without usage or routes keep a
+phase-local `local_zero` cost summary.

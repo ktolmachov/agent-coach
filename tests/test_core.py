@@ -10,9 +10,12 @@ import pytest
 
 from agent_coach.core import AgentRunner
 from agent_coach.core.contracts import (
+    AgentPhase,
+    AgentRunResult,
     AgentState,
     PlannerCallResult,
     PlannerDecision,
+    PlannerRouting,
     RunLimits,
     RunRequest,
     StopReason,
@@ -82,6 +85,12 @@ def make_search_tool() -> ToolSpec:
             "required": ["query"],
         },
     )
+
+
+def phases_by_name(result: AgentRunResult) -> dict[str, dict[str, object]]:
+    phases = result.trace["phases"]
+    assert [phase["name"] for phase in phases] == [phase.value for phase in AgentPhase]
+    return {str(phase["name"]): phase for phase in phases}
 
 
 def forbidden_import_hits(source: str) -> list[str]:
@@ -720,11 +729,251 @@ def test_fake_ports_complete_grounded_run_with_contract_answer_status() -> None:
     assert result.trace["answer_status"] == "grounded"
     assert result.trace["total_tokens"] == 12
     assert result.trace["total_cost_usd"] == 0.01
+    assert result.trace["cost_status"] == "estimated"
+    assert result.trace["grounding"] == {
+        "has_retrieval_evidence": True,
+        "has_source_citation": True,
+        "source_count": 1,
+        "answer_status": "grounded",
+    }
+    phases = phases_by_name(result)
+    assert phases["scenario_selection"]["status"] == "skipped"
+    assert phases["scenario_selection"]["detail"] == "no_scenario_selector"
+    assert phases["learner_context"]["status"] == "skipped"
+    assert phases["knowledge_retrieval"]["status"] == "completed"
+    assert phases["knowledge_retrieval"]["step_ids"] == [0]
+    assert phases["knowledge_retrieval"]["tool_call_ids"] == ["step-0"]
+    assert phases["knowledge_retrieval"]["tool_names"] == ["rag.search"]
+    assert phases["knowledge_retrieval"]["retrieval"] == {
+        "attempted": True,
+        "hit_count": 0,
+        "selected_chunk_count": 0,
+        "source_count": 1,
+        "has_grounding_evidence": True,
+        "citation_present": True,
+    }
+    assert phases["practice_branch"]["status"] == "skipped"
+    assert phases["final_validation"]["status"] == "completed"
+    assert phases["final_validation"]["detail"] == "answer_grounded"
+    assert phases["knowledge_retrieval"]["usage"]["total_tokens"] == 7
+    assert phases["knowledge_retrieval"]["cost"]["cost_status"] == "estimated"
+    assert phases["final_validation"]["usage"]["total_tokens"] == 5
     assert result.steps[0].tool_result is not None
     assert result.steps[0].tool_result.data is not None
     assert "chunks" not in result.steps[0].tool_result.data
     assert executor.calls[0][2].run_id == "run-demo"
     assert executor.calls[0][2].user_id == "demo-user"
+
+
+def test_phase_trace_uses_local_zero_cost_for_unpriced_local_runs() -> None:
+    runner = AgentRunner(
+        planner=ScriptedPlanner(
+            [
+                PlannerDecision(
+                    action="final_answer",
+                    final_answer="I cannot answer from the provided sources.",
+                )
+            ]
+        ),
+        tools=[make_search_tool()],
+        tool_executor=StaticToolExecutor(),
+    )
+
+    result = runner.run(RunRequest(question="No evidence", run_id="local-zero"))
+
+    assert result.trace["cost_status"] == "local_zero"
+    assert result.trace["total_cost_usd"] == 0.0
+    phases = phases_by_name(result)
+    assert phases["final_validation"]["status"] == "completed"
+    assert phases["final_validation"]["detail"] == "answer_abstain"
+    assert phases["final_validation"]["cost"] == {
+        "total_cost_usd": 0.0,
+        "cost_status": "local_zero",
+    }
+    assert phases["knowledge_retrieval"]["status"] == "skipped"
+    assert result.trace["grounding"]["has_retrieval_evidence"] is False
+
+
+def test_scenario_selection_completes_only_with_explicit_scenario_id() -> None:
+    result = AgentRunner(
+        planner=ScriptedPlanner(
+            [
+                PlannerDecision(
+                    action="final_answer",
+                    final_answer="I cannot answer from the provided sources.",
+                )
+            ]
+        ),
+        tools=[make_search_tool()],
+        tool_executor=StaticToolExecutor(),
+    ).run(
+        RunRequest(
+            question="Scenario request",
+            run_id="scenario-run",
+            query_options={
+                "adapter_profile": "mock",
+                "scenario_id": "grounded_success",
+            },
+        )
+    )
+
+    phase = phases_by_name(result)["scenario_selection"]
+    assert phase["status"] == "completed"
+    assert phase["detail"] == "scenario_selected"
+    assert phase["scenario_id"] == "grounded_success"
+
+
+@pytest.mark.parametrize("scenario_id", ["", "   "])
+def test_scenario_selection_skips_blank_scenario_id(scenario_id: str) -> None:
+    result = AgentRunner(
+        planner=ScriptedPlanner(
+            [
+                PlannerDecision(
+                    action="final_answer",
+                    final_answer="I cannot answer from the provided sources.",
+                )
+            ]
+        ),
+        tools=[make_search_tool()],
+        tool_executor=StaticToolExecutor(),
+    ).run(
+        RunRequest(
+            question="Scenario request",
+            run_id="blank-scenario",
+            query_options={
+                "adapter_profile": "mock",
+                "scenario_id": scenario_id,
+            },
+        )
+    )
+
+    phase = phases_by_name(result)["scenario_selection"]
+    assert phase["status"] == "skipped"
+    assert phase["detail"] == "profile_without_scenario"
+    assert "scenario_id" not in phase
+
+
+def test_local_model_route_keeps_local_zero_cost_status() -> None:
+    result = AgentRunner(
+        planner=ScriptedPlanner(
+            [
+                PlannerCallResult(
+                    decision=PlannerDecision(
+                        action="final_answer",
+                        final_answer="I cannot answer from the provided sources.",
+                    ),
+                    routing=(
+                        PlannerRouting(
+                            model_role="planner",
+                            model_id="local-model",
+                            backend="local",
+                            routing_status="local",
+                        ),
+                    ),
+                )
+            ]
+        ),
+        tools=[make_search_tool()],
+        tool_executor=StaticToolExecutor(),
+    ).run(RunRequest(question="Local route", run_id="local-route"))
+
+    assert result.trace["cost_status"] == "local_zero"
+    assert result.trace["total_cost_usd"] == 0.0
+    assert result.trace["model_routes"][0]["backend"] == "local"
+    final_phase = phases_by_name(result)["final_validation"]
+    assert final_phase["cost"] == {
+        "total_cost_usd": 0.0,
+        "cost_status": "local_zero",
+    }
+
+
+def test_phase_trace_marks_weak_retrieval_failed_and_abstains() -> None:
+    planner = ScriptedPlanner(
+        [
+            PlannerDecision(
+                action="tool_call",
+                tool_name="rag.search",
+                tool_args={"query": "empty"},
+            ),
+            PlannerDecision(
+                action="final_answer",
+                final_answer="Empty result cites empty.md.",
+            ),
+        ]
+    )
+
+    result = AgentRunner(
+        planner=planner,
+        tools=[make_search_tool()],
+        tool_executor=ForgedEvidenceToolExecutor(),
+    ).run(RunRequest(question="Can weak retrieval ground?", run_id="weak-rag"))
+
+    assert result.answer_status == "abstain"
+    phases = phases_by_name(result)
+    assert phases["knowledge_retrieval"]["status"] == "failed"
+    assert phases["knowledge_retrieval"]["detail"] == "no_grounding_evidence"
+    assert phases["knowledge_retrieval"]["retrieval"]["has_grounding_evidence"] is False
+    assert phases["final_validation"]["status"] == "completed"
+    assert phases["final_validation"]["detail"] == "answer_abstain"
+
+
+def test_phase_trace_marks_tool_error_failed_and_final_validation_skipped() -> None:
+    result = AgentRunner(
+        planner=ScriptedPlanner(
+            [
+                PlannerDecision(
+                    action="tool_call",
+                    tool_name="rag.search",
+                    tool_args={"query": "photosynthesis"},
+                )
+            ]
+        ),
+        tools=[make_search_tool()],
+        tool_executor=FailingToolExecutor(),
+    ).run(RunRequest(question="Tool fails", run_id="tool-fails"))
+
+    assert result.stop_reason is StopReason.TOOL_ERROR_LIMIT
+    phases = phases_by_name(result)
+    assert phases["knowledge_retrieval"]["status"] == "failed"
+    assert phases["knowledge_retrieval"]["detail"] == "tool_error"
+    assert phases["knowledge_retrieval"]["step_ids"] == [0]
+    assert phases["final_validation"]["status"] == "skipped"
+    assert phases["final_validation"]["detail"] == "not_reached_tool_error_limit"
+
+
+def test_phase_trace_marks_limit_stop_before_tool_as_skipped() -> None:
+    result = AgentRunner(
+        planner=ScriptedPlanner(
+            [
+                PlannerCallResult(
+                    decision=PlannerDecision(
+                        action="tool_call",
+                        tool_name="rag.search",
+                        tool_args={"query": "photosynthesis"},
+                    ),
+                    token_usage={
+                        "prompt_tokens": 100,
+                        "completion_tokens": 100,
+                        "total_tokens": 1,
+                    },
+                )
+            ]
+        ),
+        tools=[make_search_tool()],
+        tool_executor=StaticToolExecutor(),
+    ).run(
+        RunRequest(
+            question="Limit before tool",
+            run_id="limit-before-tool",
+            limits=RunLimits(max_tokens=50),
+        )
+    )
+
+    assert result.stop_reason is StopReason.MAX_TOKENS
+    phases = phases_by_name(result)
+    assert phases["knowledge_retrieval"]["status"] == "skipped"
+    assert phases["final_validation"]["status"] == "skipped"
+    assert phases["final_validation"]["detail"] == "not_reached_max_tokens"
 
 
 def test_core_counts_inconsistent_total_usage_by_prompt_and_completion() -> None:
@@ -868,6 +1117,8 @@ def test_repeated_runs_with_same_inputs_are_deterministic() -> None:
             tool_executor=StaticToolExecutor(),
         ).run(RunRequest(question="What does photosynthesis do?", run_id="stable"))
         result.trace["duration_ms"] = 0.0
+        for phase in result.trace["phases"]:
+            phase["duration_ms"] = 0.0
         return {
             "answer": result.answer,
             "state": result.state.value,

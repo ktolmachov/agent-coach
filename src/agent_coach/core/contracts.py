@@ -227,12 +227,19 @@ class AgentStep:
 
     step_index: int
     state: AgentState
+    phase: AgentPhase | None = None
     thought: str = ""
     tool_name: str | None = None
     tool_args: dict[str, Any] | None = None
     tool_result: ToolResult | None = None
     decision_raw: Any = None
     error: str | None = None
+    started_at_ms: float | None = None
+    duration_ms: float | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
 
 
 @dataclass

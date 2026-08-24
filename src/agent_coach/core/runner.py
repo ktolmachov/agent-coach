@@ -6,9 +6,11 @@ import time
 from collections.abc import Mapping, Sequence
 
 from agent_coach.core.contracts import (
+    AgentPhase,
     AgentRunResult,
     AgentState,
     AgentStep,
+    PhaseStatus,
     PlannerCallResult,
     PlannerDecision,
     PlannerRouting,
@@ -18,6 +20,7 @@ from agent_coach.core.contracts import (
     ToolContext,
     ToolResult,
     ToolSpec,
+    phase_for_tool,
 )
 from agent_coach.core.ports import (
     ClockPort,
@@ -158,6 +161,8 @@ class AgentRunner:
         if clock_error:
             return self._request_failure(request, StopReason.LLM_ERROR, clock_error)
         state = RunState(limits=request.limits, started_at=started_at)
+        if _is_unpriced_cloud_request(request):
+            state.saw_unpriced_cloud_usage = True
         context = ToolContext(
             user_id=request.user_id,
             question=request.question,
@@ -210,7 +215,11 @@ class AgentRunner:
                     answer_fallback=True,
                 )
 
-            step = AgentStep(step_index=state.step_count, state=AgentState.RUNNING)
+            step = AgentStep(
+                step_index=state.step_count,
+                state=AgentState.RUNNING,
+                started_at_ms=_elapsed_ms(state, now),
+            )
             steps.append(step)
             state.step_count += 1
             try:
@@ -228,10 +237,31 @@ class AgentRunner:
                 usage = call_result.token_usage
                 if not isinstance(decision, PlannerDecision):
                     raise TypeError("planner returned malformed decision")
-                _record_routing(state, call_result.routing)
+                _record_routing(
+                    state,
+                    call_result.routing,
+                    step_id=step.step_index,
+                )
             except Exception as exc:  # noqa: BLE001 - ports normalize external failures
+                failure_phase = _exception_phase(exc)
+                if failure_phase is not None:
+                    step.phase = failure_phase
+                failure_routing = _exception_routing(exc)
+                if failure_routing:
+                    _record_routing(
+                        state,
+                        failure_routing,
+                        step_id=step.step_index,
+                    )
+                usage_before = _usage_snapshot(state)
+                usage_error = self._account_planner_usage(
+                    state, _exception_token_usage(exc)
+                )
+                _record_step_usage_delta(
+                    step, usage_before, _usage_snapshot(state)
+                )
                 step.state = AgentState.STOPPED
-                step.error = trace_text(exc)
+                step.error = usage_error or trace_text(exc)
                 store_error = self._record_step(request, step)
                 if store_error:
                     step.error = store_error
@@ -247,7 +277,9 @@ class AgentRunner:
                 )
             step.thought = trace_text(decision.thought)
             step.decision_raw = None
+            usage_before = _usage_snapshot(state)
             usage_error = self._account_planner_usage(state, usage)
+            _record_step_usage_delta(step, usage_before, _usage_snapshot(state))
             if usage_error:
                 step.state = AgentState.STOPPED
                 step.error = usage_error
@@ -484,7 +516,9 @@ class AgentRunner:
                 record_completed=False,
             )
         step.tool_result = secure_result
+        usage_before = _usage_snapshot(state)
         usage_error = self._account_tool_usage(state, secure_result)
+        _record_step_usage_delta(step, usage_before, _usage_snapshot(state))
         if usage_error:
             step.state = AgentState.STOPPED
             step.error = usage_error
@@ -523,6 +557,7 @@ class AgentRunner:
             include_step_limit=False,
             now_monotonic=now,
         )
+        _close_step_duration(step, state, now)
         if stop.stop:
             step.state = AgentState.STOPPED
             return self._finish(
@@ -611,6 +646,9 @@ class AgentRunner:
         record_completed: bool = True,
     ) -> AgentRunResult:
         now, clock_error = self._clock_now()
+        if not clock_error:
+            _close_open_step_durations(steps, state, now)
+        cost_status, total_cost = _cost_projection(state)
         trace: dict[str, object] = {
             "run_id": request.run_id,
             "stop_reason": reason.value,
@@ -620,8 +658,8 @@ class AgentRunner:
             "prompt_tokens": state.prompt_tokens,
             "completion_tokens": state.completion_tokens,
             "total_tokens": state.total_tokens,
-            "total_cost_usd": state.total_cost_usd if state.saw_priced_usage else None,
-            "cost_status": "estimated" if state.saw_priced_usage else "unknown",
+            "total_cost_usd": total_cost,
+            "cost_status": cost_status,
             "source_count": len(sources),
             "duration_ms": round(
                 ((now or state.started_at) - state.started_at) * 1000, 3
@@ -648,6 +686,8 @@ class AgentRunner:
             result.trace["abstention_enforced"] = True
         result.trace["success"] = result.success
         result.trace["answer_status"] = result.answer_status
+        result.trace["grounding"] = _grounding_summary(result)
+        result.trace["phases"] = _phase_trace(result, request=request)
         if not record_completed:
             return result
         store_error = self._record_completed(request, result)
@@ -667,14 +707,14 @@ class AgentRunner:
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
-            "total_cost_usd": None,
-            "cost_status": "unknown",
+            "total_cost_usd": 0.0,
+            "cost_status": "local_zero",
             "source_count": 0,
             "duration_ms": 0.0,
             "success": False,
             "answer_status": "abstain",
         }
-        return AgentRunResult(
+        result = AgentRunResult(
             answer=DEFAULT_FALLBACK_ANSWER,
             sources=[],
             steps=[],
@@ -683,6 +723,9 @@ class AgentRunner:
             trace=trace,
             answer_fallback=True,
         )
+        result.trace["grounding"] = _grounding_summary(result)
+        result.trace["phases"] = _phase_trace(result, request=request)
+        return result
 
     def _record_started(self, request: RunRequest) -> str:
         try:
@@ -752,11 +795,14 @@ class AgentRunner:
         return ""
 
 
-def _record_routing(state: RunState, routing: Sequence[PlannerRouting]) -> None:
+def _record_routing(
+    state: RunState, routing: Sequence[PlannerRouting], *, step_id: int
+) -> None:
     for route in routing:
         if not isinstance(route, PlannerRouting):
             raise TypeError("planner returned malformed routing")
         projection: dict[str, object] = {
+            "step_id": step_id,
             "model_role": sanitize_identifier(route.model_role, max_chars=80),
             "model_id": sanitize_identifier(route.model_id, max_chars=80),
             "backend": sanitize_identifier(route.backend, max_chars=80),
@@ -769,6 +815,8 @@ def _record_routing(state: RunState, routing: Sequence[PlannerRouting]) -> None:
                 route.provider_call_id, max_chars=80
             )
         state.model_routes.append(projection)
+        if projection["backend"] != "local":
+            state.saw_unpriced_cloud_usage = True
 
 
 def _budget_message(
@@ -815,12 +863,17 @@ def _budget_message(
 
 
 def _add_tokens(state: RunState, usage: Mapping[str, int]) -> None:
-    prompt = _usage_counter(usage, "prompt_tokens")
-    completion = _usage_counter(usage, "completion_tokens")
-    total = max(_usage_counter(usage, "total_tokens"), prompt + completion)
+    prompt, completion, total = _normalized_token_usage(usage)
     state.prompt_tokens += prompt
     state.completion_tokens += completion
     state.total_tokens += total
+
+
+def _normalized_token_usage(usage: Mapping[str, int]) -> tuple[int, int, int]:
+    prompt = _usage_counter(usage, "prompt_tokens")
+    completion = _usage_counter(usage, "completion_tokens")
+    total = max(_usage_counter(usage, "total_tokens"), prompt + completion)
+    return prompt, completion, total
 
 
 def _usage_counter(usage: Mapping[str, int], key: str) -> int:
@@ -838,3 +891,316 @@ def _state_for_stop_reason(reason: StopReason) -> AgentState:
     if reason is StopReason.NEEDS_HUMAN:
         return AgentState.NEEDS_HUMAN
     return AgentState.STOPPED
+
+
+def _usage_snapshot(state: RunState) -> tuple[int, int, int, float]:
+    return (
+        state.prompt_tokens,
+        state.completion_tokens,
+        state.total_tokens,
+        state.total_cost_usd,
+    )
+
+
+def _record_step_usage_delta(
+    step: AgentStep,
+    before: tuple[int, int, int, float],
+    after: tuple[int, int, int, float],
+) -> None:
+    step.prompt_tokens += max(after[0] - before[0], 0)
+    step.completion_tokens += max(after[1] - before[1], 0)
+    step.total_tokens += max(after[2] - before[2], 0)
+    step.estimated_cost_usd += max(after[3] - before[3], 0.0)
+
+
+def _elapsed_ms(state: RunState, now_monotonic: float) -> float:
+    elapsed = max(0.0, now_monotonic - state.started_at)
+    return round(elapsed * 1000, 3)
+
+
+def _close_step_duration(
+    step: AgentStep, state: RunState, now_monotonic: float
+) -> None:
+    if step.duration_ms is not None:
+        return
+    started_at_ms = step.started_at_ms if step.started_at_ms is not None else 0.0
+    duration = max(_elapsed_ms(state, now_monotonic) - started_at_ms, 0.0)
+    step.duration_ms = round(duration, 3)
+
+
+def _close_open_step_durations(
+    steps: Sequence[AgentStep], state: RunState, now_monotonic: float
+) -> None:
+    for step in steps:
+        _close_step_duration(step, state, now_monotonic)
+
+
+def _cost_projection(state: RunState) -> tuple[str, float | None]:
+    if state.saw_unpriced_cloud_usage:
+        return "unknown", None
+    if state.saw_priced_usage:
+        return "estimated", round(state.total_cost_usd, 6)
+    return "local_zero", 0.0
+
+
+def _phase_trace(
+    result: AgentRunResult, *, request: RunRequest
+) -> list[dict[str, object]]:
+    routes = result.trace.get("model_routes")
+    route_items = (
+        [item for item in routes if isinstance(item, dict)]
+        if isinstance(routes, list)
+        else []
+    )
+    return [
+        _phase_projection(phase, result=result, request=request, routes=route_items)
+        for phase in AgentPhase
+    ]
+
+
+def _phase_projection(
+    phase: AgentPhase,
+    *,
+    result: AgentRunResult,
+    request: RunRequest,
+    routes: Sequence[dict[str, object]],
+) -> dict[str, object]:
+    phase_steps = _steps_for_phase(result.steps, phase)
+    phase_routes = _routes_for_steps(routes, phase_steps)
+    status, detail = _phase_status_detail(
+        phase, result=result, request=request, steps=phase_steps
+    )
+    scenario_id = _scenario_id_from_request(request)
+    projection: dict[str, object] = {
+        "name": phase.value,
+        "status": status.value,
+        "detail": detail,
+        "started_at": _phase_started_at(phase, phase_steps, status=status),
+        "duration_ms": round(sum(step.duration_ms or 0.0 for step in phase_steps), 3),
+        "step_ids": [step.step_index for step in phase_steps],
+        "tool_call_ids": [
+            f"step-{step.step_index}"
+            for step in phase_steps
+            if step.tool_name is not None
+        ],
+        "tool_names": sorted(
+            {str(step.tool_name) for step in phase_steps if step.tool_name}
+        ),
+        "model_roles": [
+            str(route["model_role"])
+            for route in phase_routes
+            if isinstance(route.get("model_role"), str)
+        ],
+        "provider_call_ids": [
+            str(route["provider_call_id"])
+            for route in phase_routes
+            if isinstance(route.get("provider_call_id"), str)
+        ],
+        "usage": _phase_usage(phase_steps),
+        "cost": _phase_cost(phase_steps, phase_routes),
+    }
+    if phase is AgentPhase.SCENARIO_SELECTION and scenario_id:
+        projection["scenario_id"] = scenario_id
+    if phase is AgentPhase.KNOWLEDGE_RETRIEVAL:
+        projection["retrieval"] = _retrieval_summary(result, phase_steps)
+    return projection
+
+
+def _steps_for_phase(
+    steps: Sequence[AgentStep], phase: AgentPhase
+) -> list[AgentStep]:
+    selected: list[AgentStep] = []
+    for step in steps:
+        step_phase = step.phase
+        if step_phase is None:
+            step_phase = phase_for_tool(step.tool_name)
+        if step_phase is None and step.state is AgentState.COMPLETED:
+            step_phase = AgentPhase.FINAL_VALIDATION
+        if step_phase is phase:
+            selected.append(step)
+    return selected
+
+
+def _routes_for_steps(
+    routes: Sequence[dict[str, object]], steps: Sequence[AgentStep]
+) -> list[dict[str, object]]:
+    step_ids = {step.step_index for step in steps}
+    return [
+        route
+        for route in routes
+        if isinstance(route.get("step_id"), int) and route["step_id"] in step_ids
+    ]
+
+
+def _phase_status_detail(
+    phase: AgentPhase,
+    *,
+    result: AgentRunResult,
+    request: RunRequest,
+    steps: Sequence[AgentStep],
+) -> tuple[PhaseStatus, str]:
+    if phase is AgentPhase.SCENARIO_SELECTION:
+        if not result.trace.get("run_id"):
+            return PhaseStatus.FAILED, "run_id_required"
+        if _scenario_id_from_request(request):
+            return PhaseStatus.COMPLETED, "scenario_selected"
+        if _adapter_profile_from_request(request):
+            return PhaseStatus.SKIPPED, "profile_without_scenario"
+        return PhaseStatus.SKIPPED, "no_scenario_selector"
+    if phase is AgentPhase.FINAL_VALIDATION:
+        if result.stop_reason is StopReason.GUARDRAIL_TRIGGERED:
+            return PhaseStatus.FAILED, "guardrail_triggered"
+        if steps and any(step.error for step in steps):
+            return PhaseStatus.FAILED, "planner_error"
+        if steps:
+            return PhaseStatus.COMPLETED, f"answer_{result.answer_status}"
+        return PhaseStatus.SKIPPED, f"not_reached_{result.stop_reason.value}"
+    if not steps:
+        return PhaseStatus.SKIPPED, f"not_requested_{phase.value}"
+    if any(step.error for step in steps):
+        if any(step.tool_name for step in steps):
+            return PhaseStatus.FAILED, "tool_error"
+        return PhaseStatus.FAILED, "planner_error"
+    if any(
+        step.tool_result is not None and not step.tool_result.ok for step in steps
+    ):
+        return PhaseStatus.FAILED, "tool_error"
+    if phase is AgentPhase.KNOWLEDGE_RETRIEVAL and not result.has_grounding_observation:
+        return PhaseStatus.FAILED, "no_grounding_evidence"
+    return PhaseStatus.COMPLETED, f"{phase.value}_completed"
+
+
+def _phase_started_at(
+    phase: AgentPhase, steps: Sequence[AgentStep], *, status: PhaseStatus
+) -> str:
+    if phase is AgentPhase.SCENARIO_SELECTION:
+        return "request" if status is not PhaseStatus.SKIPPED else "not_started"
+    if not steps:
+        return "not_started"
+    first = min(step.step_index for step in steps)
+    return f"step-{first}"
+
+
+def _phase_usage(steps: Sequence[AgentStep]) -> dict[str, object]:
+    return {
+        "prompt_tokens": sum(step.prompt_tokens for step in steps),
+        "completion_tokens": sum(step.completion_tokens for step in steps),
+        "total_tokens": sum(step.total_tokens for step in steps),
+    }
+
+
+def _phase_cost(
+    steps: Sequence[AgentStep],
+    routes: Sequence[dict[str, object]],
+) -> dict[str, object]:
+    cost = round(sum(step.estimated_cost_usd for step in steps), 6)
+    if _has_unpriced_cloud_route(routes):
+        return {"total_cost_usd": None, "cost_status": "unknown"}
+    if cost > 0:
+        return {"total_cost_usd": cost, "cost_status": "estimated"}
+    if routes:
+        return {"total_cost_usd": 0.0, "cost_status": "local_zero"}
+    return {"total_cost_usd": 0.0, "cost_status": "local_zero"}
+
+
+def _has_unpriced_cloud_route(routes: Sequence[dict[str, object]]) -> bool:
+    return any(route.get("backend") != "local" for route in routes)
+
+
+def _is_unpriced_cloud_request(request: RunRequest) -> bool:
+    return _adapter_profile_from_request(request) == "live_provider"
+
+
+def _adapter_profile_from_request(request: RunRequest) -> str:
+    profile = request.query_options.get("adapter_profile")
+    if isinstance(profile, str):
+        return sanitize_identifier(profile, max_chars=80)
+    return ""
+
+
+def _scenario_id_from_request(request: RunRequest) -> str:
+    scenario_id = request.query_options.get("scenario_id")
+    if not isinstance(scenario_id, str):
+        return ""
+    stripped = scenario_id.strip()
+    if not stripped or not _is_safe_public_identifier(stripped):
+        return ""
+    sanitized = sanitize_identifier(stripped, max_chars=80)
+    if sanitized == "[REDACTED_IDENTIFIER]" or not sanitized.strip():
+        return ""
+    if not _is_safe_public_identifier(sanitized):
+        return ""
+    return sanitized
+
+
+def _is_safe_public_identifier(value: str) -> bool:
+    if not value or len(value) > 80:
+        return False
+    first = value[0]
+    if not (first.isascii() and first.isalnum()):
+        return False
+    allowed = set("._:-")
+    for char in value:
+        if char.isascii() and (char.isalnum() or char in allowed):
+            continue
+        return False
+    return True
+
+
+def _exception_token_usage(exc: BaseException) -> Mapping[str, int] | None:
+    usage = getattr(exc, "safe_token_usage", None)
+    if isinstance(usage, Mapping):
+        return usage
+    return None
+
+
+def _exception_routing(exc: BaseException) -> tuple[PlannerRouting, ...]:
+    routing = getattr(exc, "safe_routing", ())
+    if not isinstance(routing, Sequence) or isinstance(routing, str | bytes):
+        return ()
+    return tuple(route for route in routing if isinstance(route, PlannerRouting))
+
+
+def _exception_phase(exc: BaseException) -> AgentPhase | None:
+    phase = getattr(exc, "safe_phase", None)
+    if isinstance(phase, AgentPhase):
+        return phase
+    return None
+
+
+def _retrieval_summary(
+    result: AgentRunResult, steps: Sequence[AgentStep]
+) -> dict[str, object]:
+    hit_count = 0
+    selected_chunk_count = 0
+    source_count = 0
+    for step in steps:
+        tool_result = step.tool_result
+        if tool_result is None:
+            continue
+        raw_hit_count = tool_result.meta.get("hit_count")
+        if isinstance(raw_hit_count, int) and not isinstance(raw_hit_count, bool):
+            hit_count += max(raw_hit_count, 0)
+        selected = tool_result.meta.get("selected_chunk_ids")
+        if isinstance(selected, list):
+            selected_chunk_count += len(selected)
+        sources = tool_result.meta.get("sources")
+        if isinstance(sources, list):
+            source_count += len(sources)
+    return {
+        "attempted": bool(steps),
+        "hit_count": hit_count,
+        "selected_chunk_count": selected_chunk_count,
+        "source_count": source_count,
+        "has_grounding_evidence": result.has_grounding_observation,
+        "citation_present": result.has_grounding_source_citation,
+    }
+
+
+def _grounding_summary(result: AgentRunResult) -> dict[str, object]:
+    return {
+        "has_retrieval_evidence": result.has_grounding_observation,
+        "has_source_citation": result.has_grounding_source_citation,
+        "source_count": len(result.sources),
+        "answer_status": result.answer_status,
+    }

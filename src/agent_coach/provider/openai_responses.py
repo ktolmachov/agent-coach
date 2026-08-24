@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from agent_coach.core.contracts import (
+    AgentPhase,
     AgentStep,
     PlannerCallResult,
     PlannerDecision,
@@ -339,27 +340,48 @@ class OpenAIResponsesPlanner:
             parallel_tool_calls=False,
             max_output_tokens=self._config.max_output_tokens,
         )
-        response = self._client.create_response(request)
-        _ensure_completed_response(response)
-        _validate_response_output_items(response)
-        _ensure_output_text_within_limit(
-            response, max_output_tokens=self._config.max_output_tokens
-        )
+        try:
+            response = self._client.create_response(request)
+        except ProviderAdapterError as exc:
+            raise _annotated_provider_error(
+                exc, routed, response=None, phase=AgentPhase.KNOWLEDGE_RETRIEVAL
+            ) from None
+        try:
+            _ensure_completed_response(response)
+            _validate_response_output_items(response)
+            _ensure_output_text_within_limit(
+                response, max_output_tokens=self._config.max_output_tokens
+            )
+            usage = _usage_from(response)
+            if len(response.function_calls) > 1:
+                raise ProviderAdapterError(
+                    "multiple_tool_calls",
+                    "multiple_tool_calls: provider returned more than one tool call",
+                )
+        except ProviderAdapterError as exc:
+            raise _annotated_provider_error(
+                exc,
+                routed,
+                response=response,
+                phase=AgentPhase.KNOWLEDGE_RETRIEVAL,
+            ) from None
         if self._pending_output is not None:
             self._pending_history = ()
             self._pending_call_id = None
             self._pending_output = None
-        usage = _usage_from(response)
-        if len(response.function_calls) > 1:
-            raise ProviderAdapterError(
-                "multiple_tool_calls",
-                "multiple_tool_calls: provider returned more than one tool call",
-            )
         if len(response.function_calls) == 1:
-            _require_response_id(response.response_id)
-            call = response.function_calls[0]
-            call_id = _require_call_id(call.call_id)
-            args = _parse_tool_args(call.arguments_json)
+            try:
+                _require_response_id(response.response_id)
+                call = response.function_calls[0]
+                call_id = _require_call_id(call.call_id)
+                args = _parse_tool_args(call.arguments_json)
+            except ProviderAdapterError as exc:
+                raise _annotated_provider_error(
+                    exc,
+                    routed,
+                    response=response,
+                    phase=AgentPhase.KNOWLEDGE_RETRIEVAL,
+                ) from None
             self._pending_history = request.input_items + _response_output_items(
                 response
             )
@@ -424,24 +446,37 @@ class OpenAIResponsesPlanner:
             parallel_tool_calls=None,
             max_output_tokens=self._config.max_output_tokens,
         )
-        response = self._client.create_response(request)
-        _ensure_completed_response(response)
-        _validate_response_output_items(response)
-        _ensure_output_text_within_limit(
-            response, max_output_tokens=self._config.max_output_tokens
-        )
+        try:
+            response = self._client.create_response(request)
+        except ProviderAdapterError as exc:
+            raise _annotated_provider_error(
+                exc, routed, response=None, phase=AgentPhase.FINAL_VALIDATION
+            ) from None
+        try:
+            _ensure_completed_response(response)
+            _validate_response_output_items(response)
+            _ensure_output_text_within_limit(
+                response, max_output_tokens=self._config.max_output_tokens
+            )
+            if response.function_calls:
+                raise ProviderAdapterError(
+                    "invalid_native_call",
+                    "invalid_native_call: synthesizer returned a tool call",
+                )
+            usage = _merge_usage(prior_usage, _usage_from(response))
+        except ProviderAdapterError as exc:
+            raise _annotated_provider_error(
+                exc,
+                routed,
+                response=response,
+                phase=AgentPhase.FINAL_VALIDATION,
+            ) from None
         self._pending_history = ()
         self._pending_call_id = None
         self._pending_output = None
-        if response.function_calls:
-            raise ProviderAdapterError(
-                "invalid_native_call",
-                "invalid_native_call: synthesizer returned a tool call",
-            )
         answer = (response.output_text or "").strip()
         if not answer:
             answer = "I cannot answer from the provided sources."
-        usage = _merge_usage(prior_usage, _usage_from(response))
         routing = extra_routing + (
             _routing_from(routed, provider_call_id=response.response_id or None),
         )
@@ -1343,6 +1378,44 @@ def _routing_from(
         routing_status=str(routed.routing_status),
         provider_call_id=provider_call_id,
     )
+
+
+def _annotated_provider_error(
+    exc: ProviderAdapterError,
+    routed: RoutedModel,
+    *,
+    response: NormalizedResponse | None,
+    phase: AgentPhase,
+) -> ProviderAdapterError:
+    exc.safe_phase = phase
+    exc.safe_routing = (
+        _routing_from(
+            routed,
+            provider_call_id=_safe_response_call_id(response),
+        ),
+    )
+    usage = _safe_failure_usage(response)
+    if usage is not None:
+        exc.safe_token_usage = usage
+    return exc
+
+
+def _safe_response_call_id(response: NormalizedResponse | None) -> str | None:
+    if response is None:
+        return None
+    response_id = response.response_id.strip()
+    return response_id or None
+
+
+def _safe_failure_usage(
+    response: NormalizedResponse | None,
+) -> dict[str, int] | None:
+    if response is None:
+        return None
+    try:
+        return _usage_from(response)
+    except ProviderAdapterError:
+        return None
 
 
 def _usage_from(response: NormalizedResponse) -> dict[str, int]:
