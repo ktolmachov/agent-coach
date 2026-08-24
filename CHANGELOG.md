@@ -29,6 +29,9 @@
 - Optional live-provider profile using the official OpenAI Python SDK /
   Responses API, native function calling and planner/synthesizer routing.
   The SDK is an extra (`[live]`), not a base dependency.
+- D11 final-evidence tooling: strict public release mode, a redacted opt-in
+  live eval runner, five pre-registered public live cases and a reusable
+  architecture review prompt for the public review kit.
 
 ### Fixed
 

@@ -69,14 +69,20 @@ a clean worktree, valid live evidence with
 `schema_version: "agent-coach-live-eval-evidence/1.0.0"` and
 `task_success_rate >= 0.8`, `commit` matching HEAD, `profile: "live_provider"`,
 `provider_profile_opt_in: true`, `checked_at_utc`, the registered live evidence
-provenance, at least five live cases and public evidence artifact records with
-repo-relative `docs/evidence/*.json` labels and SHA-256 digests, plus valid
-clean release evidence with
+provenance, the registered live cases and public evidence artifact records with
+repo-relative `docs/evidence/*.json` labels. Registered case contracts include
+the question, expected/allowed/forbidden tools, expected answer status, allowed
+sources, citation flag, security assertions and success rule. Each referenced
+public artifact must exist in the reviewed tree, be tracked by Git, match its
+SHA-256 digest, declare `mode: "live_provider"` and
+`contains_scripted_responses: false`, include complete per-case projections
+for both successful and failed provider cases, and recompute to the wrapper's
+task-success rate. Promotion also requires valid clean release evidence with
 `schema_version: "agent-coach-clean-release-evidence/1.0.0"` for the current
 commit, `worktree_dirty: false`, `checked_at_utc`, the registered clean-release
 evidence provenance and PASS/exit-code-0 command evidence for the fresh-clone
-suite, public release gate and offline eval gate. Clean command records must
-match the registered commands and include `stdout_sha256`. Accepted evidence
+suite, strict public release gate and offline eval gate. Clean command records
+must match the registered commands and include `stdout_sha256`. Accepted evidence
 provenance, artifact labels/digests and command records remain in the final
 report. Minimal marker-only and string-only evidence files remain invalid.
 Without those files,
@@ -90,6 +96,43 @@ The default CLI exit code follows offline `gate_status`. Supplying
 the exit code to `promotion_status`. Promotion-mode `--output` paths must be
 outside the checkout so the report cannot claim a clean worktree and then dirty
 the same checkout by writing itself.
+
+## Live Evidence Runner
+
+`scripts/run_live_eval.py` owns the opt-in D11 live-provider evidence path. The
+five public synthetic cases are registered before network execution and cover
+photosynthesis, spaced repetition, retrieval practice, active recall flashcards
+and cognitive load. Each case declares its question, expected and allowed
+tools, forbidden tools, expected grounded status, allowed source labels,
+citation requirement, security assertions and success rule.
+
+Offline runner validation uses a scripted Responses client and is explicitly
+not live evidence:
+
+```bash
+python scripts/run_live_eval.py --scripted
+```
+
+Live collection requires explicit provider and network opt-in:
+
+```bash
+python scripts/run_live_eval.py --allow-network --provider-opt-in --output docs/evidence/live-eval-public.json
+```
+
+The public artifact is a bounded redacted projection. The release gate rejects
+scripted mode, missing or empty per-case results, security/tool violations and
+self-reported success rates that do not match the case results. After it is
+committed in the reviewed tree, generate the external wrapper for the final eval
+gate:
+
+```bash
+python scripts/run_live_eval.py --wrapper-only --public-artifact docs/evidence/live-eval-public.json --wrapper-output ../agent-coach-live-wrapper.json
+```
+
+The wrapper records the current Git commit and the SHA-256 of the committed
+public artifact. Wrapper-only mode validates the public artifact before writing
+the wrapper, so a scripted validation artifact cannot be converted into live
+promotion evidence.
 
 ## Tool SOP
 

@@ -10,6 +10,7 @@ private HomeTutor checkout.
 python -m pip install -e ".[dev]"
 python -m pytest
 python scripts/run_diploma_demo.py
+python scripts/run_eval_gate.py
 ```
 
 Expected result: the demo prints JSON evidence with
@@ -184,20 +185,25 @@ public provenance, frozen id order and canonical hash, and it also checks the
 generated Tool SOP snapshot in `docs/tool_sop.md`.
 Promotion remains fail-closed unless Git HEAD is available, live evidence
 identifies the current commit, live-provider opt-in, registered evidence
-provenance, at least five live cases and public artifact labels with SHA-256
-digests, and clean release evidence records registered provenance plus
-PASS/exit-code-0 fresh-clone, public-release and offline-eval commands with
-`stdout_sha256`. Oversized, marker-only or string-only suite/evidence JSON is
-rejected. Live scores below 80% block promotion without changing offline
-`gate_status`; promotion evidence args or `--require-promotion` make
-`promotion_status` drive the CLI exit code.
+provenance, registered live cases and tracked public artifact labels with
+matching SHA-256 digests. The registered case contract includes question,
+security assertions and success rule in addition to tools, sources and citation
+requirements. The referenced public artifact must declare
+`mode: "live_provider"`, `contains_scripted_responses: false`, complete
+per-case projections for successful and failed provider cases and a recomputed
+task-success rate. Clean release evidence records registered provenance plus
+PASS/exit-code-0 fresh-clone, strict
+public-release and offline-eval commands with `stdout_sha256`. Oversized,
+marker-only or string-only suite/evidence JSON is rejected. Live scores below
+80% block promotion without changing offline `gate_status`; promotion evidence
+args or `--require-promotion` make `promotion_status` drive the CLI exit code.
 
 Run the full public check sequence:
 
 ```bash
 python -m pytest
 python -m ruff check .
-python -m compileall src
+python -m compileall src scripts
 python scripts/check_contract_export.py
 python scripts/check_openapi_snapshot.py
 python scripts/check_drift_gate.py
@@ -211,6 +217,53 @@ readiness claims, current OpenAPI, required review documents, concrete private
 security reporting fallback, internal Markdown links, release evidence
 freshness and tracked cache/database artifacts. Synthetic sanitizer fixtures
 are allowed only through narrow test-file allowlists.
+
+Strict final release mode adds clean-tree and D11 artifact requirements:
+
+```bash
+python scripts/check_public_release.py --release
+```
+
+The strict mode is expected to fail until the reviewed commit is clean and
+`docs/evidence/live-eval-public.json` exists as redacted opt-in live-provider
+evidence. Scripted Responses validation is useful for testing the runner, but
+it is not live evidence and is rejected as a release artifact. Empty or
+incomplete result objects are also rejected; the gate recomputes the live task
+success rate from registered per-case results.
+
+## Live Provider Evidence
+
+The live eval cases are fixed before any provider call. They cover five public
+synthetic knowledge-base questions: photosynthesis, spaced repetition,
+retrieval practice, active recall flashcards and cognitive load. Each case
+expects `rag.search`, forbids tools outside the live read-only subset, requires
+a grounded answer with citation to the allowed packaged source and requires
+zero security failures or hidden writes.
+
+Offline runner validation:
+
+```bash
+python scripts/run_live_eval.py --scripted
+```
+
+Opt-in live collection, after explicit approval for network, credentials,
+models and possible cost:
+
+```bash
+python scripts/run_live_eval.py --allow-network --provider-opt-in --output docs/evidence/live-eval-public.json
+```
+
+After the reviewed commit exists, write the external wrapper that binds the
+public artifact hash to that immutable commit:
+
+```bash
+python scripts/run_live_eval.py --wrapper-only --public-artifact docs/evidence/live-eval-public.json --wrapper-output ../agent-coach-live-wrapper.json
+```
+
+The public artifact contains only bounded projections: case contract, executed
+tool names, source labels, phase statuses, model roles, token/time summaries
+and unknown-cost status. It does not store raw prompts, raw provider payloads,
+chain-of-thought, credentials or learner data.
 
 ## Troubleshooting
 

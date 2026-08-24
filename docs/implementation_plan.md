@@ -763,6 +763,7 @@ Write-set:
 
 - versioned offline eval suite and KPI thresholds;
 - deterministic offline eval runner and focused tests;
+- opt-in live eval runner and focused scripted-runner tests;
 - generated Tool SOP and drift check;
 - review-kit, README, scripts and implementation-plan documentation updates;
 - public release gate awareness for D11 eval/SOP artifacts.
@@ -772,13 +773,16 @@ Implemented artifacts:
 - `src/agent_coach/eval/`;
 - `src/agent_coach/data/diploma_eval_cases.json`;
 - `scripts/run_eval_gate.py`;
+- `scripts/run_live_eval.py`;
 - `tests/test_eval_gate.py`;
+- `tests/test_live_eval_runner.py`;
 - `docs/eval_gate.md`;
 - `docs/tool_sop.md`;
+- `docs/prompts/architecture_review_prompt.md`;
 - D11 documentation updates in `README.md`, `docs/review_kit.md`,
   `scripts/README.md` and this implementation plan;
-- public release gate checks for eval-suite validity and generated Tool SOP
-  drift.
+- public release gate checks for eval-suite validity, generated Tool SOP drift,
+  strict final release mode and D11 review/live-evidence artifacts.
 
 D11 micro-slice evidence:
 
@@ -797,6 +801,11 @@ D11 micro-slice evidence:
 - active live cost cap with unknown pricing fails closed;
 - generated Tool SOP is derived from current advertised `ToolSpec` values and
   compared to the committed snapshot;
+- strict `scripts/check_public_release.py --release` preserves normal
+  development mode while failing closed on dirty tree state or missing D11
+  final artifacts;
+- `scripts/run_live_eval.py --scripted` validates the live eval runner offline
+  without treating scripted Responses output as live evidence;
 - offline `gate_status` is separate from `promotion_status`;
 - `promotion_status` remains fail-closed until Git HEAD is available, live
   evidence, clean worktree state and clean fresh-clone release evidence are all
@@ -826,14 +835,20 @@ Promotion thresholds:
   promotion without changing offline `gate_status`;
 - Git HEAD/status evidence is available or promotion stays `HOLD`;
 - valid live evidence must bind to HEAD, declare live-provider opt-in, include
-  registered evidence provenance, at least five live cases and public
-  `docs/evidence/*.json` artifact labels with SHA-256 digests;
+  registered evidence provenance, registered live cases and public
+  `docs/evidence/*.json` artifact labels whose tracked files exist in the
+  reviewed tree, match their SHA-256 digests, declare live mode without
+  scripted responses, include complete per-case projections for successful and
+  failed provider cases and recompute to the wrapper task-success rate;
 - valid clean release evidence must bind to HEAD and include PASS/exit-code-0
-  fresh-clone, public release gate and offline eval gate command records with
-  `stdout_sha256` plus registered clean-release evidence provenance;
+  fresh-clone, strict public release gate and offline eval gate command records
+  with `stdout_sha256` plus registered clean-release evidence provenance;
 - custom suite JSON is capped at 128000 bytes and evidence JSON at 64000 bytes;
 - all security, hidden-write and grounding violations equal 0;
 - README/SOP/evidence drift checks pass;
+- README contains the diploma case, scenario, architecture, routing,
+  function-calling, vector-memory, quickstart, live-provider, KPI,
+  comparison and limitation sections required by D11;
 - full fresh-clone suite passes before final promotion;
 - release evidence is clean and immutable;
 - no unresolved misleading claims.
@@ -841,6 +856,7 @@ Promotion thresholds:
 Checks:
 
 - focused eval-gate tests;
+- focused live-runner tests;
 - release-gate regression tests;
 - D11 eval CLI;
 - public release gate;

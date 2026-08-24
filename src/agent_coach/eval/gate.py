@@ -33,6 +33,10 @@ from agent_coach.core.contracts import (
 from agent_coach.core.ports import Message
 from agent_coach.core.runner import AgentRunner
 from agent_coach.core.security import DefaultSecurityPolicy, trace_text
+from agent_coach.eval.live_evidence import (
+    read_limited_live_eval_public_bytes,
+    validate_live_eval_public_payload,
+)
 from agent_coach.mock import advertised_mock_tools, build_mock_composition
 from agent_coach.profiles.live import advertised_live_tools
 from agent_coach.provider.config import (
@@ -144,7 +148,7 @@ UNSAFE_MARKERS = (
 )
 EXPECTED_CLEAN_RELEASE_COMMANDS = {
     "fresh_clone_suite": "python -m pytest",
-    "public_release_gate": "python scripts/check_public_release.py",
+    "public_release_gate": "python scripts/check_public_release.py --release",
     "offline_eval_gate": "python scripts/run_eval_gate.py",
 }
 
@@ -919,6 +923,13 @@ def _load_live_evidence(
             "live",
             "public evidence_artifacts with SHA-256 are required",
         )
+    artifact_failure = _verify_public_evidence_artifacts(
+        artifacts,
+        expected_case_count=case_count,
+        expected_task_success_rate=task_success_rate,
+    )
+    if artifact_failure is not None:
+        return _invalid_evidence("live", artifact_failure)
     return {
         "status": "available",
         "required_for_promotion": True,
@@ -1090,6 +1101,48 @@ def _public_evidence_artifacts(value: object) -> list[dict[str, str]] | None:
             return None
         artifacts.append({"label": label, "sha256": digest})
     return artifacts
+
+
+def _verify_public_evidence_artifacts(
+    artifacts: Sequence[Mapping[str, str]],
+    *,
+    expected_case_count: int,
+    expected_task_success_rate: float,
+) -> str | None:
+    for artifact in artifacts:
+        label = artifact["label"]
+        artifact_path = REPO_ROOT / Path(label)
+        try:
+            data = read_limited_live_eval_public_bytes(artifact_path)
+        except OSError:
+            return f"public evidence artifact is missing: {label}"
+        except ValueError as exc:
+            return f"public evidence artifact is invalid: {exc}"
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != artifact["sha256"]:
+            return f"public evidence artifact digest mismatch: {label}"
+        if _git_output("ls-files", "--error-unmatch", "--", label) != label:
+            return f"public evidence artifact is not tracked: {label}"
+        try:
+            public_payload = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return f"public evidence artifact is malformed JSON: {label}"
+        public_failures = validate_live_eval_public_payload(
+            public_payload,
+            require_threshold=False,
+        )
+        if public_failures:
+            return f"public evidence artifact is invalid: {public_failures[0]}"
+        if public_payload.get("case_count") != expected_case_count:
+            return f"public evidence artifact case_count mismatch: {label}"
+        public_rate = _bounded_rate_value(public_payload.get("task_success_rate"))
+        rate_mismatch = (
+            public_rate is None
+            or abs(public_rate - expected_task_success_rate) > 0.000001
+        )
+        if rate_mismatch:
+            return f"public evidence artifact task_success_rate mismatch: {label}"
+    return None
 
 
 def _public_evidence_label(value: object) -> str | None:

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
-from scripts import run_eval_gate
+from scripts import run_eval_gate, run_live_eval
 
 from agent_coach.eval import (
     build_tool_sop_markdown,
@@ -84,6 +85,7 @@ def test_live_evidence_is_schema_validated_and_thresholded(
     assert "live_evidence_invalid" in malformed_report["promotion_blockers"]
 
     weak = tmp_path / "weak-live.json"
+    weak_artifact = _write_valid_public_artifact(tmp_path, success_count=3)
     weak.write_text(
         json.dumps(
             {
@@ -94,17 +96,28 @@ def test_live_evidence_is_schema_validated_and_thresholded(
                 "provider_profile_opt_in": True,
                 "checked_at_utc": "2026-08-24T00:00:00Z",
                 "case_count": 5,
-                "task_success_rate": 0.79,
-                "evidence_artifacts": [_valid_artifact_record()],
+                "task_success_rate": 0.6,
+                "evidence_artifacts": [_artifact_record(weak_artifact)],
             }
         ),
         encoding="utf-8",
     )
 
     def fake_git(*args: str) -> str:
-        return "clean-head" if args == ("rev-parse", "HEAD") else ""
+        if args == ("rev-parse", "HEAD"):
+            return "clean-head"
+        if args == (
+            "ls-files",
+            "--error-unmatch",
+            "--",
+            "docs/evidence/live-eval-public.json",
+        ):
+            return "docs/evidence/live-eval-public.json"
+        return ""
 
     monkeypatch.setattr("agent_coach.eval.gate._git_output", fake_git)
+    monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", True))
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
     weak_report = run_eval_suite(live_evidence_path=weak)
     assert weak_report["gate_status"] == "PASS"
     assert weak_report["promotion_status"] == "HOLD"
@@ -128,7 +141,7 @@ def test_dirty_worktree_prevents_promotion_pass(
                 "checked_at_utc": "2026-08-24T00:00:00Z",
                 "case_count": 5,
                 "task_success_rate": 0.8,
-                "evidence_artifacts": [_valid_artifact_record()],
+                "evidence_artifacts": [_valid_artifact_record(tmp_path)],
             }
         ),
         encoding="utf-8",
@@ -150,7 +163,7 @@ def test_dirty_worktree_prevents_promotion_pass(
                         "stdout_sha256": _VALID_SHA256,
                     },
                     "public_release_gate": {
-                        "command": "python scripts/check_public_release.py",
+                        "command": "python scripts/check_public_release.py --release",
                         "exit_code": 0,
                         "status": "PASS",
                         "stdout_sha256": _VALID_SHA256,
@@ -168,9 +181,19 @@ def test_dirty_worktree_prevents_promotion_pass(
     )
 
     def fake_git(*args: str) -> str:
-        return "clean-head" if args == ("rev-parse", "HEAD") else " M README.md"
+        if args == ("rev-parse", "HEAD"):
+            return "clean-head"
+        if args == (
+            "ls-files",
+            "--error-unmatch",
+            "--",
+            "docs/evidence/live-eval-public.json",
+        ):
+            return "docs/evidence/live-eval-public.json"
+        return " M README.md"
 
     monkeypatch.setattr("agent_coach.eval.gate._git_output", fake_git)
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
     monkeypatch.setattr(
         "agent_coach.eval.gate._git_status_short",
         lambda: (" M README.md", True),
@@ -192,9 +215,10 @@ def test_valid_evidence_provenance_is_reported(
 ) -> None:
     monkeypatch.setattr(
         "agent_coach.eval.gate._git_output",
-        lambda *args: "clean-head" if args == ("rev-parse", "HEAD") else "",
+        _fake_clean_git,
     )
     monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", True))
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
 
     report = run_eval_suite(
         live_evidence_path=_valid_live_evidence(tmp_path),
@@ -205,7 +229,9 @@ def test_valid_evidence_provenance_is_reported(
     assert report["live_evidence"]["provenance"] == (
         gate.EXPECTED_LIVE_EVIDENCE_PROVENANCE
     )
-    assert report["live_evidence"]["evidence_artifacts"] == [_valid_artifact_record()]
+    assert report["live_evidence"]["evidence_artifacts"] == [
+        _artifact_record(tmp_path / "docs" / "evidence" / "live-eval-public.json")
+    ]
     assert report["clean_release_evidence"]["provenance"] == (
         gate.EXPECTED_CLEAN_RELEASE_EVIDENCE_PROVENANCE
     )
@@ -214,6 +240,90 @@ def test_valid_evidence_provenance_is_reported(
         "public_release_gate",
         "offline_eval_gate",
     }
+
+
+def test_live_evidence_rejects_missing_mismatched_and_untracked_public_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", True))
+
+    missing_root = tmp_path / "missing"
+    missing_root.mkdir()
+    missing = _valid_live_evidence(missing_root)
+    (missing_root / "docs" / "evidence" / "live-eval-public.json").unlink()
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", missing_root)
+    monkeypatch.setattr("agent_coach.eval.gate._git_output", _fake_clean_git)
+
+    missing_report = run_eval_suite(live_evidence_path=missing)
+
+    assert missing_report["live_evidence"]["status"] == "invalid"
+    assert "public evidence artifact is missing" in missing_report[
+        "live_evidence"
+    ]["reason"]
+
+    mismatch_root = tmp_path / "mismatch"
+    mismatch_root.mkdir()
+    mismatch = _valid_live_evidence(mismatch_root)
+    artifact = mismatch_root / "docs" / "evidence" / "live-eval-public.json"
+    artifact.write_text(artifact.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", mismatch_root)
+    monkeypatch.setattr("agent_coach.eval.gate._git_output", _fake_clean_git)
+
+    mismatch_report = run_eval_suite(live_evidence_path=mismatch)
+
+    assert mismatch_report["live_evidence"]["status"] == "invalid"
+    assert "public evidence artifact digest mismatch" in mismatch_report[
+        "live_evidence"
+    ]["reason"]
+
+    untracked_root = tmp_path / "untracked"
+    untracked_root.mkdir()
+    untracked = _valid_live_evidence(untracked_root)
+
+    def fake_untracked_git(*args: str) -> str:
+        if args == ("rev-parse", "HEAD"):
+            return "clean-head"
+        return ""
+
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", untracked_root)
+    monkeypatch.setattr("agent_coach.eval.gate._git_output", fake_untracked_git)
+
+    untracked_report = run_eval_suite(live_evidence_path=untracked)
+
+    assert untracked_report["live_evidence"]["status"] == "invalid"
+    assert "public evidence artifact is not tracked" in untracked_report[
+        "live_evidence"
+    ]["reason"]
+
+
+def test_live_evidence_rejects_oversized_public_artifact_before_digest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", True))
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
+    monkeypatch.setattr("agent_coach.eval.gate._git_output", _fake_clean_git)
+    live = _valid_live_evidence(tmp_path)
+    artifact = tmp_path / "docs" / "evidence" / "live-eval-public.json"
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    payload["padding"] = "x" * 80_000
+    artifact.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    wrapper = json.loads(live.read_text(encoding="utf-8"))
+    wrapper["evidence_artifacts"][0]["sha256"] = sha256(
+        artifact.read_bytes()
+    ).hexdigest()
+    live.write_text(json.dumps(wrapper), encoding="utf-8")
+
+    report = run_eval_suite(live_evidence_path=live)
+
+    assert report["live_evidence"]["status"] == "invalid"
+    assert "live eval public evidence exceeds 64000 bytes" in report[
+        "live_evidence"
+    ]["reason"]
 
 
 def test_clean_promotion_requires_clean_release_evidence(
@@ -232,17 +342,27 @@ def test_clean_promotion_requires_clean_release_evidence(
                 "checked_at_utc": "2026-08-24T00:00:00Z",
                 "case_count": 5,
                 "task_success_rate": 0.8,
-                "evidence_artifacts": [_valid_artifact_record()],
+                "evidence_artifacts": [_valid_artifact_record(tmp_path)],
             }
         ),
         encoding="utf-8",
     )
 
     def fake_git(*args: str) -> str:
-        return "clean-head" if args == ("rev-parse", "HEAD") else ""
+        if args == ("rev-parse", "HEAD"):
+            return "clean-head"
+        if args == (
+            "ls-files",
+            "--error-unmatch",
+            "--",
+            "docs/evidence/live-eval-public.json",
+        ):
+            return "docs/evidence/live-eval-public.json"
+        return ""
 
     monkeypatch.setattr("agent_coach.eval.gate._git_output", fake_git)
     monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", True))
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
     report = run_eval_suite(live_evidence_path=live)
 
     assert report["gate_status"] == "PASS"
@@ -307,9 +427,10 @@ def test_evidence_strings_are_normalized_and_redacted(
 ) -> None:
     monkeypatch.setattr(
         "agent_coach.eval.gate._git_output",
-        lambda *args: "clean-head" if args == ("rev-parse", "HEAD") else "",
+        _fake_clean_git,
     )
     monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", True))
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
     private_path = "D:" + "\\".join(("", "Projects", "hometutor", "secret.json"))
     live = tmp_path / "leaky-live.json"
     live.write_text(
@@ -388,7 +509,7 @@ def test_old_marker_only_artifact_and_command_records_do_not_promote(
                         "status": "PASS",
                     },
                     "public_release_gate": {
-                        "command": "python scripts/check_public_release.py",
+                        "command": "python scripts/check_public_release.py --release",
                         "exit_code": 0,
                         "status": "PASS",
                     },
@@ -418,6 +539,7 @@ def test_git_unavailable_prevents_promotion_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("agent_coach.eval.gate._git_output", lambda *_args: "")
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
 
     report = run_eval_suite(
         live_evidence_path=_valid_live_evidence(tmp_path, commit="unknown"),
@@ -438,9 +560,10 @@ def test_git_status_unavailable_prevents_promotion_pass(
 ) -> None:
     monkeypatch.setattr(
         "agent_coach.eval.gate._git_output",
-        lambda *args: "clean-head" if args == ("rev-parse", "HEAD") else "",
+        _fake_clean_git,
     )
     monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", False))
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
 
     report = run_eval_suite(
         live_evidence_path=_valid_live_evidence(tmp_path),
@@ -707,6 +830,7 @@ def test_print_tool_sop_snapshot_error_omits_absolute_path(
 
 def _valid_live_evidence(tmp_path: Path, *, commit: str = "clean-head") -> Path:
     path = tmp_path / "valid-live.json"
+    artifact = _write_valid_public_artifact(tmp_path)
     path.write_text(
         json.dumps(
             {
@@ -718,7 +842,7 @@ def _valid_live_evidence(tmp_path: Path, *, commit: str = "clean-head") -> Path:
                 "checked_at_utc": "2026-08-24T00:00:00Z",
                 "case_count": 5,
                 "task_success_rate": 1.0,
-                "evidence_artifacts": [_valid_artifact_record()],
+                "evidence_artifacts": [_artifact_record(artifact)],
             }
         ),
         encoding="utf-8",
@@ -726,11 +850,48 @@ def _valid_live_evidence(tmp_path: Path, *, commit: str = "clean-head") -> Path:
     return path
 
 
-def _valid_artifact_record() -> dict[str, str]:
+def _valid_artifact_record(tmp_path: Path) -> dict[str, str]:
+    return _artifact_record(_write_valid_public_artifact(tmp_path))
+
+
+def _artifact_record(path: Path) -> dict[str, str]:
     return {
         "label": "docs/evidence/live-eval-public.json",
-        "sha256": _VALID_SHA256,
+        "sha256": sha256(path.read_bytes()).hexdigest(),
     }
+
+
+def _write_valid_public_artifact(
+    tmp_path: Path, *, success_count: int | None = None
+) -> Path:
+    artifact = tmp_path / "docs" / "evidence" / "live-eval-public.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    payload = run_live_eval.run_live_eval(scripted=True)
+    payload["mode"] = "live_provider"
+    payload["contains_scripted_responses"] = False
+    payload["provider_profile_opt_in"] = True
+    if success_count is not None:
+        for index, result in enumerate(payload["results"]):
+            result["task_success"] = index < success_count
+        payload["task_success_rate"] = round(success_count / len(payload["results"]), 6)
+    artifact.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return artifact
+
+
+def _fake_clean_git(*args: str) -> str:
+    if args == ("rev-parse", "HEAD"):
+        return "clean-head"
+    if args == (
+        "ls-files",
+        "--error-unmatch",
+        "--",
+        "docs/evidence/live-eval-public.json",
+    ):
+        return "docs/evidence/live-eval-public.json"
+    return ""
 
 
 def _valid_clean_evidence(tmp_path: Path, *, commit: str = "clean-head") -> Path:
@@ -751,7 +912,7 @@ def _valid_clean_evidence(tmp_path: Path, *, commit: str = "clean-head") -> Path
                         "stdout_sha256": _VALID_SHA256,
                     },
                     "public_release_gate": {
-                        "command": "python scripts/check_public_release.py",
+                        "command": "python scripts/check_public_release.py --release",
                         "exit_code": 0,
                         "status": "PASS",
                         "stdout_sha256": _VALID_SHA256,

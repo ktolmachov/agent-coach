@@ -2,15 +2,150 @@ from __future__ import annotations
 
 import json
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 
 from scripts import check_public_release as gate
+from scripts import run_live_eval
 
 from agent_coach.api import create_app
 
 
 def test_public_release_gate_passes() -> None:
     assert gate.main() == 0
+
+
+def test_public_release_gate_has_help_and_release_mode(
+    capsys,
+) -> None:
+    try:
+        gate.main(["--help"])
+    except SystemExit as exc:
+        assert exc.code == 0
+    captured = capsys.readouterr()
+    assert "--release" in captured.out
+
+
+def test_strict_release_mode_rejects_dirty_tree_and_missing_live_artifact(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _write_required_files(tmp_path)
+    (tmp_path / "docs" / "prompts").mkdir(exist_ok=True)
+    (tmp_path / "docs" / "prompts" / "architecture_review_prompt.md").write_text(
+        "# Architecture Review Prompt\n",
+        encoding="utf-8",
+    )
+
+    def fake_git(_repo_root: Path, *args: str) -> str:
+        if args == ("rev-parse", "HEAD"):
+            return "clean-head\n"
+        if args == ("status", "--short"):
+            return " M README.md\n"
+        if args == ("ls-files", "--cached", "--others", "--exclude-standard"):
+            return ""
+        return ""
+
+    monkeypatch.setattr(gate, "_git_output", fake_git)
+
+    failures = gate.build_failures(tmp_path, release_mode=True)
+
+    assert "strict release mode requires a clean worktree" in failures
+    assert (
+        "strict release artifact is missing: docs/evidence/live-eval-public.json"
+        in failures
+    )
+
+
+def test_live_eval_public_evidence_schema_is_validated() -> None:
+    payload = _valid_live_public_payload()
+
+    assert (
+        gate._validate_evidence_payload(
+            Path("docs/evidence/live-eval-public.json"),
+            payload,
+            "head",
+        )
+        == []
+    )
+
+    payload["contains_scripted_responses"] = True
+    assert (
+        "scripted responses are not live evidence: "
+        "docs\\evidence\\live-eval-public.json"
+    ) in gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        payload,
+        "head",
+    )
+
+    payload = _valid_live_public_payload()
+    payload["results"] = [{}, {}, {}, {}, {}]
+    payload["task_success_rate"] = 0.8
+    failures = gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        payload,
+        "head",
+    )
+
+    assert any(
+        "live eval results do not match registered case ids" in item
+        for item in failures
+    )
+    assert any(
+        "live eval task_success_rate does not match per-case results" in item
+        for item in failures
+    )
+
+
+def test_live_eval_public_case_contract_freezes_review_fields() -> None:
+    payload = _valid_live_public_payload()
+    payload["cases"][0]["question"] = "A different experiment question?"
+    payload["cases"][0]["security_assertions"] = []
+    payload["cases"][0]["success_rule"] = "always pass"
+
+    failures = gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        payload,
+        "head",
+    )
+
+    assert any("live eval case question mismatch" in item for item in failures)
+    assert any("live eval case contract mismatch" in item for item in failures)
+    assert any("live eval case success rule mismatch" in item for item in failures)
+
+    unchanged = deepcopy(_valid_live_public_payload())
+    assert gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        unchanged,
+        "head",
+    ) == []
+
+
+def test_public_release_gate_rejects_oversized_live_eval_artifact(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = Path("docs/evidence/live-eval-public.json")
+    artifact = tmp_path / path
+    artifact.parent.mkdir(parents=True)
+    payload = _valid_live_public_payload()
+    payload["padding"] = "x" * 80_000
+    artifact.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        gate,
+        "_git_output",
+        lambda *_args: "head" if _args[1:] == ("rev-parse", "HEAD") else "",
+    )
+
+    failures = gate._check_evidence_artifacts(tmp_path, [path])
+
+    assert failures == [
+        "malformed release evidence docs\\evidence\\live-eval-public.json: "
+        "live eval public evidence exceeds 64000 bytes"
+    ]
 
 
 def test_publishable_scan_rejects_generic_secrets_and_private_paths(tmp_path) -> None:
@@ -286,11 +421,18 @@ def _write_required_files(root: Path) -> None:
         gate.build_tool_sop_markdown(),
         encoding="utf-8",
     )
+    (root / "docs" / "prompts").mkdir(exist_ok=True)
+    (root / "docs" / "prompts" / "architecture_review_prompt.md").write_text(
+        "# Architecture Review Prompt\n",
+        encoding="utf-8",
+    )
     (root / "docs" / "openapi.json").write_text(
         json.dumps(create_app().openapi(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     (root / "contracts" / "export_manifest.json").write_text("{}\n", encoding="utf-8")
+    (root / "scripts").mkdir(exist_ok=True)
+    (root / "scripts" / "run_live_eval.py").write_text("# live eval\n")
 
 
 def _init_git(root: Path) -> None:
@@ -314,3 +456,11 @@ def _init_git(root: Path) -> None:
         check=True,
         capture_output=True,
     )
+
+
+def _valid_live_public_payload() -> dict[str, object]:
+    payload = run_live_eval.run_live_eval(scripted=True)
+    payload["mode"] = "live_provider"
+    payload["contains_scripted_responses"] = False
+    payload["provider_profile_opt_in"] = True
+    return payload

@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import re
 import subprocess
-from collections.abc import Iterable
+import sys
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
 from agent_coach.api import create_app
+from agent_coach.core.security import trace_text
 from agent_coach.eval import build_tool_sop_markdown, load_eval_suite
+from agent_coach.eval.live_evidence import (
+    LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
+    load_live_eval_public_payload,
+    validate_live_eval_public_payload,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DRIFT_GATE_PATH = REPO_ROOT / "scripts" / "check_drift_gate.py"
@@ -255,19 +263,38 @@ _contains_private_absolute_path = _DRIFT_GATE._contains_private_absolute_path
 _scan_text_fragments = _DRIFT_GATE._scan_text_fragments
 
 
-def main() -> int:
-    failures = build_failures()
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Check the public Agent Coach diploma release surface.",
+    )
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="Enable strict final release mode; fails on any dirty tree state.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_arg_parser().parse_args(() if argv is None else argv)
+    failures = build_failures(release_mode=args.release)
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
         return 1
-    print("OK: public release gate passed")
+    mode = "strict public release gate" if args.release else "public release gate"
+    print(f"OK: {mode} passed")
     return 0
 
 
-def build_failures(repo_root: Path = REPO_ROOT) -> list[str]:
+def build_failures(
+    repo_root: Path = REPO_ROOT, *, release_mode: bool = False
+) -> list[str]:
     failures: list[str] = []
     files = tuple(_release_files(repo_root))
+    if release_mode:
+        failures.extend(_check_strict_release_git_state(repo_root))
+        failures.extend(_check_strict_d11_release_artifacts(repo_root))
     failures.extend(_check_required_files(repo_root))
     failures.extend(_check_sensitive_containers(files))
     failures.extend(_check_publishable_text(repo_root, files))
@@ -293,8 +320,10 @@ def _check_required_files(repo_root: Path) -> list[str]:
         "docs/dependency_notices.md",
         "docs/eval_gate.md",
         "docs/tool_sop.md",
+        "docs/prompts/architecture_review_prompt.md",
         "docs/openapi.json",
         "contracts/export_manifest.json",
+        "scripts/run_live_eval.py",
     ]
     failures = [
         f"required file is missing: {path}"
@@ -415,9 +444,15 @@ def _check_evidence_artifacts(repo_root: Path, files: Iterable[Path]) -> list[st
         if path.parts[:2] != ("docs", "evidence") or path.suffix != ".json":
             continue
         try:
-            payload = json.loads((repo_root / path).read_text(encoding="utf-8"))
+            if path.name == "live-eval-public.json":
+                payload = load_live_eval_public_payload(repo_root / path)
+            else:
+                payload = json.loads((repo_root / path).read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             failures.append(f"malformed release evidence {path}: {exc.msg}")
+            continue
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            failures.append(f"malformed release evidence {path}: {trace_text(exc)}")
             continue
         failures.extend(_validate_evidence_payload(path, payload, head))
     return failures
@@ -428,6 +463,8 @@ def _validate_evidence_payload(
 ) -> list[str]:
     if not isinstance(payload, dict):
         return [f"release evidence must be a JSON object: {path}"]
+    if payload.get("schema_version") == LIVE_EVAL_PUBLIC_SCHEMA_VERSION:
+        return _validate_live_eval_public_payload(path, payload)
     failures = []
     if payload.get("schema_version") != EVIDENCE_SCHEMA_VERSION:
         failures.append(f"unexpected release evidence schema in {path}")
@@ -441,6 +478,45 @@ def _validate_evidence_payload(
     if not isinstance(result, dict) or result.get("success") is not True:
         failures.append(f"release evidence does not contain successful result: {path}")
     return failures
+
+
+def _validate_live_eval_public_payload(
+    path: Path, payload: dict[str, Any]
+) -> list[str]:
+    return [
+        f"{failure}: {path}"
+        for failure in validate_live_eval_public_payload(payload)
+    ]
+
+
+def _check_strict_release_git_state(repo_root: Path) -> list[str]:
+    failures = []
+    try:
+        head = _git_output(repo_root, "rev-parse", "HEAD").strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ["strict release mode requires an available Git HEAD"]
+    if not head:
+        failures.append("strict release mode requires an available Git HEAD")
+    try:
+        status = _git_output(repo_root, "status", "--short").strip()
+    except (OSError, subprocess.CalledProcessError):
+        failures.append("strict release mode requires Git status evidence")
+    else:
+        if status:
+            failures.append("strict release mode requires a clean worktree")
+    return failures
+
+
+def _check_strict_d11_release_artifacts(repo_root: Path) -> list[str]:
+    required = [
+        "docs/prompts/architecture_review_prompt.md",
+        "docs/evidence/live-eval-public.json",
+    ]
+    return [
+        f"strict release artifact is missing: {path}"
+        for path in required
+        if not (repo_root / path).is_file()
+    ]
 
 
 def _check_release_artifacts(repo_root: Path, files: Iterable[Path]) -> list[str]:
@@ -534,4 +610,4 @@ def _git_output(repo_root: Path, *args: str) -> str:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))
