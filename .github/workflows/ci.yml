@@ -26,9 +26,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install package and development tools
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev,build]"
       - name: Import package
         run: python -c "import agent_coach; print(agent_coach.__version__)"
+      - name: Run package artifact smoke
+        run: python -m pytest tests/test_package_smoke.py
       - name: Run tests
         run: python -m pytest
       - name: Run Ruff

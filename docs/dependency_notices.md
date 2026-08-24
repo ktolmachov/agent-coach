@@ -8,7 +8,14 @@ small and is declared in `pyproject.toml`.
 | Package | Purpose | License |
 | --- | --- | --- |
 | FastAPI | Localhost Mock Agent API framework | MIT |
+| Pydantic | Runtime request/response models and strict schema configuration | MIT |
 | Uvicorn | Localhost ASGI server entry point | BSD-3-Clause |
+
+## Build Dependencies
+
+| Package | Purpose | License |
+| --- | --- | --- |
+| Build | Wheel build frontend for artifact smoke checks | MIT |
 
 ## Development Dependencies
 

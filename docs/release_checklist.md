@@ -9,7 +9,8 @@ ownership cutover.
 Run from a fresh clone or a disposable copy:
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,build]"
+python -m pytest tests/test_package_smoke.py
 python -m pytest
 python -m ruff check .
 python -m compileall src scripts
