@@ -12,5 +12,8 @@ Before opening a change:
 4. Run targeted tests, Ruff and compile checks for the touched surface.
 5. Stop after the promotion report instead of starting the next slice.
 
-D1 accepts only foundation changes. Agent Core, contracts, fixtures, mock
-adapters and the Mock Agent API belong to later slices.
+Use `docs/implementation_plan.md` as the source of truth for the current slice,
+its lifecycle status and its authorized write-set. Historical slice boundaries
+remain in force: foundation, contracts, Core, adapters, API, retrieval,
+provider, eval and release evidence changes stay in their documented owner
+slices unless a maintenance change explicitly scopes a smaller surface.

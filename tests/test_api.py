@@ -14,8 +14,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_coach.api import create_app
-from agent_coach.api.models import API_VERSION, MAX_REQUEST_BYTES, OPENAPI_VERSION
+from agent_coach.api.models import (
+    API_VERSION,
+    MAX_REQUEST_BYTES,
+    OPENAPI_VERSION,
+    RunCreateRequest,
+)
 from agent_coach.api.server import DEFAULT_HOST, DEFAULT_PORT, build_arg_parser
+from agent_coach.api.service import MAX_STORED_RUNS, ApiError, MockApiService
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -164,6 +170,71 @@ def test_concurrent_idempotency_conflict_is_atomic() -> None:
 
     assert statuses == [202, 409]
     assert conflict_codes == ["idempotency_conflict"]
+
+
+def test_run_store_capacity_evicts_oldest_run_and_idempotency_pair() -> None:
+    service = MockApiService()
+    created = [
+        service.create_run(
+            RunCreateRequest(
+                scenario_id="grounded_success",
+                question=f"question {index}",
+            ),
+            idempotency_key=f"capacity-{index}",
+        )
+        for index in range(MAX_STORED_RUNS + 1)
+    ]
+    first = created[0]
+    recent = created[-1]
+
+    assert len(service._runs) <= MAX_STORED_RUNS
+    assert len(service._idempotency) <= MAX_STORED_RUNS
+    with pytest.raises(ApiError) as exc_info:
+        service.get_run(first.run_id)
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.code == "unknown_run"
+
+    replaced = service.create_run(
+        RunCreateRequest(scenario_id="grounded_success", question="question 0"),
+        idempotency_key="capacity-0",
+    )
+    replay = service.create_run(
+        RunCreateRequest(
+            scenario_id="grounded_success",
+            question=f"question {MAX_STORED_RUNS}",
+        ),
+        idempotency_key=f"capacity-{MAX_STORED_RUNS}",
+    )
+    with pytest.raises(ApiError) as conflict_info:
+        service.create_run(
+            RunCreateRequest(
+                scenario_id="grounded_success",
+                question="different recent question",
+            ),
+            idempotency_key=f"capacity-{MAX_STORED_RUNS}",
+        )
+
+    assert replaced.run_id == first.run_id
+    assert replay == recent
+    assert conflict_info.value.status_code == 409
+    assert conflict_info.value.code == "idempotency_conflict"
+    assert len(service._runs) <= MAX_STORED_RUNS
+    assert len(service._idempotency) <= MAX_STORED_RUNS
+
+
+def test_evicted_run_get_returns_bounded_not_found() -> None:
+    client = _client()
+    created = [
+        _create_run(client, key=f"http-capacity-{index}", question=f"question {index}")
+        for index in range(MAX_STORED_RUNS + 1)
+    ]
+    first = created[0].json()
+
+    response = client.get(first["polling_url"])
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "unknown_run"
+    assert "Traceback" not in response.text
 
 
 def test_unknown_run_returns_bounded_not_found() -> None:

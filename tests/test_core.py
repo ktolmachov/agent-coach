@@ -56,6 +56,7 @@ FILE_POSIX_PRIVATE_PATH = "file:///home/private/user/secret.md"
 UNC_PRIVATE_PATH = "\\\\server\\private\\secret.md"
 PUBLIC_URL_WITH_QUERY = "https://example.com/docs/page?x=1#fragment"
 LOCALHOST_PUBLIC_URL = "http://localhost:8000/path"
+PROVIDER_TOKEN_MARKER = "sk-SYNTHETIC123456"
 
 
 def make_search_tool() -> ToolSpec:
@@ -376,6 +377,40 @@ class PublicUrlToolExecutor:
                     }
                 ],
             },
+        )
+
+
+class ProviderTokenToolExecutor:
+    def execute(
+        self,
+        tool: ToolSpec,
+        args: Mapping[str, object],
+        context: ToolContext,
+    ) -> ToolResult:
+        del tool, args, context
+        return ToolResult.success(
+            {
+                "chunks": [
+                    {
+                        "text": (
+                            "Photosynthesis stores light energy. "
+                            + PROVIDER_TOKEN_MARKER
+                        )
+                    }
+                ],
+                "summary": "retrieved with " + PROVIDER_TOKEN_MARKER,
+            },
+            **{
+                PROVIDER_TOKEN_MARKER: "metadata key",
+                "nested": {"credential": PROVIDER_TOKEN_MARKER},
+            },
+            sources=[
+                {
+                    "file_name": PROVIDER_TOKEN_MARKER,
+                    "text": "Photosynthesis stores light energy.",
+                    "cite_index": 1,
+                }
+            ],
         )
 
 
@@ -1668,6 +1703,90 @@ def test_projection_sanitizes_final_answer_metadata_keys_args_and_tool_names() -
     assert unknown_tool_result.trace["tool_calls"] == ["secret.md"]
 
 
+def test_provider_token_shape_is_redacted_from_grounded_public_projection() -> None:
+    harmless = "risk-adjusted practice stays source-grounded"
+    planner = ScriptedPlanner(
+        [
+            PlannerDecision(
+                action="tool_call",
+                tool_name="rag.search",
+                tool_args={"query": PROVIDER_TOKEN_MARKER},
+                thought="planner saw " + PROVIDER_TOKEN_MARKER,
+                raw={PROVIDER_TOKEN_MARKER: "raw token key"},
+            ),
+            PlannerDecision(
+                action="final_answer",
+                final_answer=(
+                    "Photosynthesis stores light energy with "
+                    + PROVIDER_TOKEN_MARKER
+                    + " while "
+                    + harmless
+                    + " [1]."
+                ),
+            ),
+        ]
+    )
+    store = RecordingStore()
+    message_builder = CapturingMessageBuilder()
+
+    result = AgentRunner(
+        planner=planner,
+        tools=[make_search_tool()],
+        tool_executor=ProviderTokenToolExecutor(),
+        message_builder=message_builder,
+        run_store=store,
+    ).run(
+        RunRequest(
+            question="Provider token projection",
+            run_id="provider-token-projection",
+        )
+    )
+    invalid_args_result = AgentRunner(
+        planner=ScriptedPlanner(
+            [
+                PlannerDecision(
+                    action="tool_call",
+                    tool_name="rag.search",
+                    tool_args={PROVIDER_TOKEN_MARKER: "x"},
+                )
+            ]
+        ),
+        tools=[make_search_tool()],
+        tool_executor=StaticToolExecutor(),
+    ).run(RunRequest(question="Invalid token key", run_id="invalid-token-key"))
+    unknown_tool_result = AgentRunner(
+        planner=ScriptedPlanner(
+            [
+                PlannerDecision(
+                    action="tool_call",
+                    tool_name=PROVIDER_TOKEN_MARKER,
+                    tool_args={"query": "x"},
+                )
+            ]
+        ),
+        tools=[make_search_tool()],
+        tool_executor=StaticToolExecutor(),
+    ).run(RunRequest(question="Unknown token tool", run_id="unknown-token-tool"))
+
+    serialized = json.dumps(
+        {
+            "result": result,
+            "store": store,
+            "snapshots": message_builder.snapshots,
+            "invalid_args": invalid_args_result,
+            "unknown_tool": unknown_tool_result,
+        },
+        default=str,
+        ensure_ascii=False,
+    )
+    assert result.answer_status == "grounded"
+    assert PROVIDER_TOKEN_MARKER not in result.answer
+    assert PROVIDER_TOKEN_MARKER not in serialized
+    assert harmless in result.answer
+    assert harmless in serialized
+    assert "[REDACTED_PROVIDER_TOKEN]" in serialized
+
+
 @pytest.mark.parametrize("fail_on_call", [1, 2, 3])
 def test_clock_exceptions_return_terminal_results(fail_on_call: int) -> None:
     planner = ScriptedPlanner(
@@ -1942,6 +2061,10 @@ def test_security_rejects_harness_only_args_and_redacts_tool_results() -> None:
     assert "[REDACTED_EMAIL]" in json.dumps(result.data)
     assert "[REDACTED_SECRET]" in json.dumps(result.data)
     assert "[REDACTED_BEARER]" in json.dumps(result.meta)
+    assert (
+        redact_sensitive_text("Keep task-safe text but hide " + PROVIDER_TOKEN_MARKER)
+        == "Keep task-safe text but hide [REDACTED_PROVIDER_TOKEN]"
+    )
 
 
 @pytest.mark.parametrize(

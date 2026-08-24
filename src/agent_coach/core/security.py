@@ -24,6 +24,7 @@ UNSAFE_TOOL_TEXT = "[REDACTED_UNSAFE_TOOL_TEXT]"
 _EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
 _PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+?\d[\d\s().-]{7,}\d)(?!\d)")
 _BEARER_PATTERN = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
+_PROVIDER_TOKEN_PATTERN = re.compile(r"\bsk-[A-Za-z0-9][A-Za-z0-9._-]{5,}\b")
 _SECRET_PATTERN = re.compile(
     r"\b(?:api[_ -]?key|token|secret|password)\b\s*[:=]?\s*([A-Za-z0-9_.+/=-]{6,})",
     re.IGNORECASE,
@@ -58,6 +59,7 @@ def redact_sensitive_text(value: object) -> str:
     text = _EMAIL_PATTERN.sub("[REDACTED_EMAIL]", text)
     text = _PHONE_PATTERN.sub("[REDACTED_PHONE]", text)
     text = _BEARER_PATTERN.sub("[REDACTED_BEARER]", text)
+    text = _PROVIDER_TOKEN_PATTERN.sub("[REDACTED_PROVIDER_TOKEN]", text)
     return _SECRET_PATTERN.sub(
         lambda match: match.group(0).replace(match.group(1), "[REDACTED_SECRET]"),
         text,

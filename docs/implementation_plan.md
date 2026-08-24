@@ -321,6 +321,8 @@ Stop:
 
 ## D6 - Parity and Drift Gate
 
+Status: complete.
+
 Inputs:
 
 - D2 manifest and exported contracts;

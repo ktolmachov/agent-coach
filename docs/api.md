@@ -47,5 +47,11 @@ including chunked requests without `Content-Length`. Startup rejects
 non-loopback bind addresses. The API keeps state only in process memory and
 returns no stack traces to clients.
 
+Ephemeral run memory is capped at 256 stored runs. When the 257th unique run is
+accepted, the oldest run and its matching idempotency mapping are evicted
+together. `GET` for an evicted run returns the same bounded `404 unknown_run`
+envelope as any unknown run. Recently retained idempotency keys keep the same
+replay and conflict behavior described above.
+
 Cancellation is reserved as `POST /v1/runs/{run_id}/cancel`, but it must not
 appear in OpenAPI until a route exists in a later slice.

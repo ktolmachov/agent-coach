@@ -39,6 +39,8 @@ from agent_coach.mock import (
     load_mock_fixture,
 )
 
+MAX_STORED_RUNS = 256
+
 
 class ApiError(Exception):
     """Bounded API failure that renders as a public error envelope."""
@@ -123,6 +125,7 @@ class MockApiService:
             _ensure_json_size(_run_status(stored), request.result_limit_chars)
             self._runs[run_id] = stored
             self._idempotency[normalized_key] = run_id
+            self._evict_oldest_run_if_needed()
             return _accepted(stored)
 
     def get_run(self, run_id: str) -> RunStatusResponse:
@@ -199,6 +202,15 @@ class MockApiService:
         )
         _ensure_json_size(response, request.result_limit_chars)
         return response
+
+    def _evict_oldest_run_if_needed(self) -> None:
+        while len(self._runs) > MAX_STORED_RUNS:
+            oldest_run_id = next(iter(self._runs))
+            self._runs.pop(oldest_run_id)
+            for key, mapped_run_id in list(self._idempotency.items()):
+                if mapped_run_id == oldest_run_id:
+                    self._idempotency.pop(key)
+                    break
 
 
 def _build_composition_or_422(scenario_id: str):

@@ -90,9 +90,14 @@ python scripts/run_diploma_demo.py --output ../agent-coach-diploma-demo.json
 ```
 
 Keep generated evidence outside the checkout unless it is intentionally
-committed as release evidence. Any committed `docs/evidence/*.json` file must
-point to the reviewed immutable commit and declare `worktree_dirty: false`;
-`scripts/check_public_release.py` fails closed otherwise.
+committed as release evidence. D11 evidence has three distinct layers:
+`docs/evidence/live-eval-public.json` is the committed redacted live public
+artifact and does not need to contain `commit` or `worktree_dirty`; the
+external live evidence wrapper binds the reviewed immutable commit to that
+public artifact's SHA-256 digest; clean-release evidence records
+`worktree_dirty: false` plus PASS/exit-code-0 command evidence.
+`scripts/check_public_release.py` fails closed when required release evidence is
+missing or invalid.
 
 ## API Examples
 
