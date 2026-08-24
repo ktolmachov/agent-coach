@@ -51,10 +51,42 @@ MAX_TOOL_OUTPUT_CHARS = 2400
 MAX_GROUNDED_CONTEXT_CHARS = 2400
 MAX_REPLAY_ITEMS = 16
 MAX_REPLAY_TEXT_CHARS = 8192
+MAX_REPLAY_TOTAL_TEXT_CHARS = MAX_REPLAY_TEXT_CHARS * 4
+MAX_REPLAY_NODES = 512
+MAX_REPLAY_DEPTH = 32
 MIN_OUTPUT_TEXT_CHARS = 512
 OUTPUT_CHARS_PER_TOKEN = 16
 REASONING_ENCRYPTED_CONTENT_INCLUDE = "reasoning.encrypted_content"
 SUPPORTED_RESPONSE_OUTPUT_TYPES = frozenset({"message", "reasoning", "function_call"})
+SUPPORTED_MESSAGE_PHASES = frozenset({"commentary", "final_answer"})
+REPLAY_ITEM_FIELDS = (
+    "id",
+    "status",
+    "phase",
+    "role",
+    "content",
+    "summary",
+    "encrypted_content",
+    "call_id",
+    "name",
+    "arguments",
+)
+REPLAY_OBJECT_FIELDS = (
+    "id",
+    "type",
+    "status",
+    "phase",
+    "role",
+    "content",
+    "summary",
+    "encrypted_content",
+    "call_id",
+    "name",
+    "arguments",
+    "text",
+    "annotations",
+    "refusal",
+)
 _UNSAFE_STATUS_TOKEN_PATTERN = re.compile(
     r"(api[_-]?key|bearer|password|secret|token|sk-[A-Za-z0-9])",
     re.IGNORECASE,
@@ -99,6 +131,52 @@ class NormalizedResponse:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+
+
+@dataclass
+class ReplayValidationBudget:
+    """Shared replay walker limits for one provider response output."""
+
+    nodes: int = 0
+    text_chars: int = 0
+    active_ids: set[int] | None = None
+
+    def add_node(self, *, path: str, depth: int) -> None:
+        if depth > MAX_REPLAY_DEPTH:
+            raise ProviderAdapterError(
+                "dependency",
+                f"dependency: provider replay nesting too deep ({path})",
+            )
+        self.nodes += 1
+        if self.nodes > MAX_REPLAY_NODES:
+            raise ProviderAdapterError(
+                "dependency",
+                f"dependency: provider replay object too large ({path})",
+            )
+
+    def add_text(self, length: int, *, path: str) -> None:
+        self.text_chars += length
+        if self.text_chars > MAX_REPLAY_TOTAL_TEXT_CHARS:
+            raise ProviderAdapterError(
+                "dependency",
+                f"dependency: provider replay text too large ({path})",
+            )
+
+    def enter(self, value: object, *, path: str) -> int:
+        object_id = id(value)
+        if self.active_ids is None:
+            self.active_ids = set()
+        if object_id in self.active_ids:
+            raise ProviderAdapterError(
+                "dependency",
+                f"dependency: provider replay cycle detected ({path})",
+            )
+        self.active_ids.add(object_id)
+        return object_id
+
+    def leave(self, object_id: int) -> None:
+        if self.active_ids is not None:
+            self.active_ids.discard(object_id)
 
 
 @dataclass(frozen=True)
@@ -263,6 +341,7 @@ class OpenAIResponsesPlanner:
         )
         response = self._client.create_response(request)
         _ensure_completed_response(response)
+        _validate_response_output_items(response)
         _ensure_output_text_within_limit(
             response, max_output_tokens=self._config.max_output_tokens
         )
@@ -347,6 +426,7 @@ class OpenAIResponsesPlanner:
         )
         response = self._client.create_response(request)
         _ensure_completed_response(response)
+        _validate_response_output_items(response)
         _ensure_output_text_within_limit(
             response, max_output_tokens=self._config.max_output_tokens
         )
@@ -406,6 +486,12 @@ def build_official_responses_client(
         timeout=config.timeout_sec,
         max_retries=config.max_retries,
     )
+    responses = getattr(client, "responses", None)
+    if not callable(getattr(responses, "create", None)):
+        raise LiveConfigurationError(
+            "unsupported_sdk",
+            "live profile requires an OpenAI SDK with Responses API support",
+        )
     return OpenAISdkResponsesClient(client)
 
 
@@ -432,7 +518,8 @@ def _import_openai() -> Any:
 
 def _normalize_mapping(raw: Mapping[str, object]) -> NormalizedResponse:
     output = raw.get("output")
-    calls = tuple(_function_calls_from_output(output))
+    output_items = tuple(_replay_items_from_output(output))
+    calls = tuple(_function_calls_from_output(output_items))
     usage_raw = raw.get("usage")
     if usage_raw is None:
         usage: Mapping[str, object] = {}
@@ -453,7 +540,7 @@ def _normalize_mapping(raw: Mapping[str, object]) -> NormalizedResponse:
         status=str(raw["status"]) if "status" in raw else None,
         output_text=str(raw.get("output_text") or _text_from_output(output)),
         function_calls=calls,
-        output_items=tuple(_replay_items_from_output(output)),
+        output_items=output_items,
         error=_provider_error_code(raw.get("error")),
         incomplete_reason=_provider_error_code(
             incomplete.get("reason") if incomplete else None
@@ -472,14 +559,15 @@ def _normalize_mapping(raw: Mapping[str, object]) -> NormalizedResponse:
 
 def _normalize_sdk_object(raw: object) -> NormalizedResponse:
     output = getattr(raw, "output", None)
+    output_items = tuple(_replay_items_from_output(output))
     usage = getattr(raw, "usage", None)
     incomplete = getattr(raw, "incomplete_details", None)
     return NormalizedResponse(
         response_id=str(getattr(raw, "id", "") or ""),
         status=str(raw.status) if hasattr(raw, "status") else None,
         output_text=str(getattr(raw, "output_text", "") or _text_from_output(output)),
-        function_calls=tuple(_function_calls_from_output(output)),
-        output_items=tuple(_replay_items_from_output(output)),
+        function_calls=tuple(_function_calls_from_output(output_items)),
+        output_items=output_items,
         error=_provider_error_code(getattr(raw, "error", None)),
         incomplete_reason=_provider_error_code(
             getattr(incomplete, "reason", None) if incomplete is not None else None
@@ -543,14 +631,19 @@ def _replay_items_from_output(output: object) -> list[dict[str, object]]:
             "dependency: provider response output exceeded replay limit",
         )
     items: list[dict[str, object]] = []
+    budget = ReplayValidationBudget()
     for item in output:
-        normalized = _normalize_replay_item(item)
+        normalized = _normalize_replay_item(item, budget=budget)
         if normalized:
             items.append(normalized)
     return items
 
 
-def _normalize_replay_item(item: object) -> dict[str, object]:
+def _normalize_replay_item(
+    item: object,
+    *,
+    budget: ReplayValidationBudget,
+) -> dict[str, object]:
     if isinstance(item, Mapping):
         raw = item
     else:
@@ -582,67 +675,248 @@ def _normalize_replay_item(item: object) -> dict[str, object]:
             "unsupported",
             "unsupported: provider returned unsupported response output",
         )
-    if item_type == "reasoning" and not str(
-        raw.get("encrypted_content") or ""
-    ).strip():
+    _validate_replay_item_schema(raw, item_type=item_type)
+    return _normalize_replay_mapping(raw, item_type=item_type, budget=budget)
+
+
+def _normalize_replay_mapping(
+    raw: Mapping[str, object],
+    *,
+    item_type: str,
+    budget: ReplayValidationBudget,
+) -> dict[str, object]:
+    replay: dict[str, object] = {"type": item_type}
+    for key in REPLAY_ITEM_FIELDS:
+        if key in raw:
+            if key == "phase":
+                phase = _validated_replay_phase(raw, item_type=item_type)
+                replay[key] = _validated_replay_value(
+                    phase,
+                    path=key,
+                    budget=budget,
+                )
+            else:
+                replay[key] = _validated_replay_value(
+                    raw[key],
+                    path=key,
+                    budget=budget,
+                )
+    return replay
+
+
+def _validate_replay_item_schema(
+    item: Mapping[str, object],
+    *,
+    item_type: str,
+) -> None:
+    if item_type == "message":
+        _validate_message_replay_item(item)
+    elif item_type == "function_call":
+        _validate_function_call_replay_item(item)
+    elif item_type == "reasoning":
+        _validate_reasoning_replay_item(item)
+    if "phase" in item:
+        _validated_replay_phase(item, item_type=item_type)
+
+
+def _validate_message_replay_item(item: Mapping[str, object]) -> None:
+    role = _required_replay_string(item, "role", item_type="message")
+    if role != "assistant":
+        raise ProviderAdapterError(
+            "dependency",
+            "dependency: provider message replay role malformed",
+        )
+    content = item.get("content")
+    if (
+        not isinstance(content, Sequence)
+        or isinstance(content, str | bytes)
+        or not content
+    ):
+        raise ProviderAdapterError(
+            "dependency",
+            "dependency: provider message replay content malformed",
+        )
+    for block in content:
+        block_type = str(_item_field(block, "type") or "")
+        if block_type == "output_text":
+            if not isinstance(_item_field(block, "text"), str):
+                raise ProviderAdapterError(
+                    "dependency",
+                    "dependency: provider message replay content malformed",
+                )
+            continue
+        if block_type == "refusal":
+            if not isinstance(_item_field(block, "refusal"), str):
+                raise ProviderAdapterError(
+                    "dependency",
+                    "dependency: provider message replay content malformed",
+                )
+            continue
+        raise ProviderAdapterError(
+            "dependency",
+            "dependency: provider message replay content malformed",
+        )
+
+
+def _validate_function_call_replay_item(item: Mapping[str, object]) -> None:
+    _required_replay_string(item, "call_id", item_type="function_call")
+    _required_replay_string(item, "name", item_type="function_call")
+    _required_replay_string(item, "arguments", item_type="function_call")
+
+
+def _validate_reasoning_replay_item(item: Mapping[str, object]) -> None:
+    _required_replay_string(item, "id", item_type="reasoning")
+    encrypted_content = item.get("encrypted_content")
+    if not isinstance(encrypted_content, str) or not encrypted_content.strip():
         raise ProviderAdapterError(
             "dependency",
             "dependency: provider reasoning item missing encrypted content",
         )
-    replay: dict[str, object] = {"type": item_type}
-    for key in (
-        "id",
-        "status",
-        "phase",
-        "role",
-        "content",
-        "summary",
-        "encrypted_content",
-        "call_id",
-        "name",
-        "arguments",
-    ):
-        if key in raw:
-            replay[key] = _validated_replay_value(raw[key], path=key)
-    return replay
 
 
-def _validated_replay_value(value: object, *, path: str) -> object:
+def _required_replay_string(
+    item: Mapping[str, object],
+    key: str,
+    *,
+    item_type: str,
+) -> str:
+    value = item.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ProviderAdapterError(
+            "dependency",
+            f"dependency: provider {item_type} replay item missing {key}",
+        )
+    return value
+
+
+def _validated_replay_phase(
+    raw: Mapping[str, object],
+    *,
+    item_type: str,
+) -> str:
+    if item_type != "message":
+        raise ProviderAdapterError(
+            "dependency",
+            "dependency: provider replay phase is only valid on assistant messages",
+        )
+    if str(raw.get("role") or "") != "assistant":
+        raise ProviderAdapterError(
+            "dependency",
+            "dependency: provider replay phase is only valid on assistant messages",
+        )
+    phase = raw.get("phase")
+    if not isinstance(phase, str) or phase not in SUPPORTED_MESSAGE_PHASES:
+        raise ProviderAdapterError(
+            "dependency",
+            "dependency: provider replay phase value malformed",
+        )
+    return phase
+
+
+def _validated_replay_value(
+    value: object,
+    *,
+    path: str,
+    budget: ReplayValidationBudget,
+    depth: int = 0,
+) -> object:
+    budget.add_node(path=path, depth=depth)
     if isinstance(value, str):
         if len(value) > MAX_REPLAY_TEXT_CHARS:
             raise ProviderAdapterError(
                 "dependency",
                 f"dependency: provider replay field too large ({path})",
             )
+        budget.add_text(len(value), path=path)
         return value
     if isinstance(value, int | float | bool) or value is None:
         return value
     if isinstance(value, Mapping):
+        object_id = budget.enter(value, path=path)
         if len(value) > MAX_REPLAY_ITEMS:
             raise ProviderAdapterError(
                 "dependency",
                 f"dependency: provider replay object too large ({path})",
             )
-        return {
-            str(key): _validated_replay_value(item, path=f"{path}.field")
-            for key, item in value.items()
-        }
+        try:
+            normalized: dict[str, object] = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise ProviderAdapterError(
+                        "dependency",
+                        f"dependency: provider replay mapping key malformed ({path})",
+                    )
+                budget.add_node(path=f"{path}.key", depth=depth + 1)
+                if len(key) > MAX_REPLAY_TEXT_CHARS:
+                    raise ProviderAdapterError(
+                        "dependency",
+                        f"dependency: provider replay mapping key too large ({path})",
+                    )
+                budget.add_text(len(key), path=f"{path}.key")
+                if key in normalized:
+                    raise ProviderAdapterError(
+                        "dependency",
+                        f"dependency: provider replay mapping key duplicated ({path})",
+                    )
+                normalized[key] = _validated_replay_value(
+                    item,
+                    path=f"{path}.field",
+                    budget=budget,
+                    depth=depth + 1,
+                )
+            return normalized
+        finally:
+            budget.leave(object_id)
     if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        object_id = budget.enter(value, path=path)
         if len(value) > MAX_REPLAY_ITEMS:
             raise ProviderAdapterError(
                 "dependency",
                 f"dependency: provider replay array too large ({path})",
             )
-        return [
-            _validated_replay_value(item, path=f"{path}[]") for item in value
-        ]
+        try:
+            return [
+                _validated_replay_value(
+                    item,
+                    path=f"{path}[]",
+                    budget=budget,
+                    depth=depth + 1,
+                )
+                for item in value
+            ]
+        finally:
+            budget.leave(object_id)
+    projected = _project_replay_object(value)
+    if projected:
+        object_id = budget.enter(value, path=path)
+        try:
+            return {
+                key: _validated_replay_value(
+                    item,
+                    path=f"{path}.field",
+                    budget=budget,
+                    depth=depth + 1,
+                )
+                for key, item in projected.items()
+            }
+        finally:
+            budget.leave(object_id)
     text = str(value)
     if len(text) > MAX_REPLAY_TEXT_CHARS:
         raise ProviderAdapterError(
             "dependency",
             f"dependency: provider replay value too large ({path})",
         )
+    budget.add_text(len(text), path=path)
     return text
+
+
+def _project_replay_object(value: object) -> dict[str, object]:
+    return {
+        name: getattr(value, name)
+        for name in REPLAY_OBJECT_FIELDS
+        if getattr(value, name, None) is not None
+    }
 
 
 def _text_from_output(output: object) -> str:
@@ -768,20 +1042,31 @@ def _response_output_items(
         }
         for call in response.function_calls
         )
-    _validate_replay_items(items, response.function_calls)
-    return items
+    return _validate_replay_items(items, response.function_calls)
+
+
+def _validate_response_output_items(response: NormalizedResponse) -> None:
+    if response.output_items:
+        _validate_replay_items(response.output_items, response.function_calls)
 
 
 def _validate_replay_items(
     items: Sequence[dict[str, object]],
     function_calls: Sequence[NormalizedFunctionCall],
-) -> None:
+) -> tuple[dict[str, object], ...]:
     if len(items) > MAX_REPLAY_ITEMS:
         raise ProviderAdapterError(
             "dependency",
             "dependency: provider response output exceeded replay limit",
         )
+    normalized_items: list[dict[str, object]] = []
+    budget = ReplayValidationBudget()
     for item in items:
+        if not isinstance(item, Mapping):
+            raise ProviderAdapterError(
+                "dependency",
+                "dependency: provider response output item malformed",
+            )
         item_type = str(item.get("type") or "")
         if not item_type:
             raise ProviderAdapterError(
@@ -793,26 +1078,56 @@ def _validate_replay_items(
                 "unsupported",
                 "unsupported: provider returned unsupported response output",
             )
-        if item_type == "reasoning" and not str(
-            item.get("encrypted_content") or ""
-        ).strip():
-            raise ProviderAdapterError(
-                "dependency",
-                "dependency: provider reasoning item missing encrypted content",
-            )
-    call_ids = {
-        str(item.get("call_id") or "")
-        for item in items
-        if item.get("type") == "function_call"
-    }
-    missing = [
-        call.call_id for call in function_calls if call.call_id not in call_ids
-    ]
-    if missing:
+        _validate_replay_item_schema(item, item_type=item_type)
+        normalized_items.append(
+            _normalize_replay_mapping(item, item_type=item_type, budget=budget)
+        )
+    normalized = tuple(normalized_items)
+    _validate_replay_function_call_linkage(normalized, function_calls)
+    return normalized
+
+
+def _validate_replay_function_call_linkage(
+    items: Sequence[dict[str, object]],
+    function_calls: Sequence[NormalizedFunctionCall],
+) -> None:
+    replay_calls = [item for item in items if item.get("type") == "function_call"]
+    if len(replay_calls) != len(function_calls):
         raise ProviderAdapterError(
             "dependency",
-            "dependency: provider function call missing from replay output",
+            "dependency: provider function call replay mismatch",
         )
+    expected_by_call_id: dict[str, NormalizedFunctionCall] = {}
+    for call in function_calls:
+        if call.call_id in expected_by_call_id:
+            raise ProviderAdapterError(
+                "dependency",
+                "dependency: provider function call replay mismatch",
+            )
+        expected_by_call_id[call.call_id] = call
+    seen_call_ids: set[str] = set()
+    for item in replay_calls:
+        call_id = str(item.get("call_id") or "")
+        if call_id in seen_call_ids:
+            raise ProviderAdapterError(
+                "dependency",
+                "dependency: provider function call replay mismatch",
+            )
+        seen_call_ids.add(call_id)
+        expected = expected_by_call_id.get(call_id)
+        if expected is None:
+            raise ProviderAdapterError(
+                "dependency",
+                "dependency: provider function call replay mismatch",
+            )
+        if (
+            item.get("name") != expected.name
+            or item.get("arguments") != expected.arguments_json
+        ):
+            raise ProviderAdapterError(
+                "dependency",
+                "dependency: provider function call replay mismatch",
+            )
 
 
 def _grounded_context(steps: Sequence[AgentStep]) -> str:

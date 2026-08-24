@@ -21,7 +21,8 @@ LocalVectorRagTool   public demo learner.get_profile
 Agent Core remains the only orchestration loop. The official SDK is a provider
 adapter, not a second runner. LangGraph and the OpenAI Agents SDK are not used.
 
-The SDK is an optional extra:
+The SDK is an optional extra. The dependency floor is OpenAI Python SDK 1.66,
+a locally verified floor with the `responses.create` resource:
 
 ```bash
 python -m pip install -e ".[live]"
@@ -29,8 +30,9 @@ python -m pip install -e ".[live]"
 
 Base install, `[dev]` install and offline CI do not require the SDK, a network
 or an API key. Missing SDK or `AGENT_COACH_LIVE_API_KEY` fails closed with a
-bounded configuration error. The live profile never silently substitutes the
-mock planner.
+bounded configuration error. An installed SDK without callable
+`responses.create` is rejected at the composition boundary before a provider
+request. The live profile never silently substitutes the mock planner.
 
 ## Model routing
 
@@ -70,12 +72,21 @@ The next provider turn is stateless: it replays the original input and every
 bounded `response.output` item, then sends the matching `function_call_output`
 with the same `call_id`, without using server-side `previous_response_id`.
 Reasoning items and encrypted reasoning content are preserved exactly for
-replay but are not exposed in public traces. Assistant output item `phase`
-values are also preserved unchanged during manual replay. Replay-critical
-provider output is never silently truncated or partially dropped; oversized
-replay fails closed before another provider request is created. Malformed
-replay items, missing item `type`, missing reasoning `encrypted_content` and
-replay output that omits the matching function call fail closed. Replay
+replay but are not exposed in public traces. Valid assistant message item
+`phase` values are preserved unchanged during manual replay; malformed values,
+non-message placement and non-assistant message placement fail closed.
+Replay-critical provider output is never silently truncated or partially
+dropped; oversized replay fails closed before another provider request is
+created. Completed planner and synthesizer responses validate saved output
+items before accepting either a tool call or final answer. Raw, SDK-object and
+direct normalized replay items share one bounded walker with per-field text,
+cumulative text, node-count, depth and cycle limits. Nested mapping keys must
+be strings, are counted as replay nodes and text, and cannot bypass those
+limits through string coercion or collisions. Malformed replay items,
+missing item `type`, malformed supported item schemas, missing reasoning
+`encrypted_content` and replay output that omits the matching function call
+fail closed. Replay function calls must match the normalized call set exactly
+by `call_id`, `name` and `arguments`, with no extras or duplicates. Replay
 diagnostics use static field labels and do not echo provider-controlled mapping
 keys. Raw provider payloads and chain-of-thought are not stored in traces. API
 keys never appear in `repr`, traces, exceptions or public results. API base

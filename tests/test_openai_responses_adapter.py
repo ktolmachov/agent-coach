@@ -248,13 +248,19 @@ def test_stateless_follow_up_replays_original_input_and_response_output() -> Non
             {
                 "type": "reasoning",
                 "id": "rs_1",
-                "phase": "commentary",
                 "encrypted_content": encrypted,
                 "summary": [{"type": "summary_text", "text": "Need retrieval."}],
             },
             {
-                "type": "function_call",
+                "type": "message",
+                "role": "assistant",
                 "phase": "commentary",
+                "content": [
+                    {"type": "output_text", "text": "I'll check the grounded notes."}
+                ],
+            },
+            {
+                "type": "function_call",
                 "call_id": "call_reasoned",
                 "name": "rag.search",
                 "arguments": '{"query": "chlorophyll"}',
@@ -293,11 +299,12 @@ def test_stateless_follow_up_replays_original_input_and_response_output() -> Non
     )
     follow_up = client.calls[1]
     types = [item.get("type") or item.get("role") for item in follow_up.input_items]
-    assert types[:6] == [
+    assert types[:7] == [
         "user",
         "user",
         "user",
         "reasoning",
+        "message",
         "function_call",
         "function_call_output",
     ]
@@ -305,11 +312,14 @@ def test_stateless_follow_up_replays_original_input_and_response_output() -> Non
         "How does chlorophyll capture light?"
     )
     assert follow_up.input_items[3]["id"] == "rs_1"
-    assert follow_up.input_items[3]["phase"] == "commentary"
     assert follow_up.input_items[3]["encrypted_content"] == encrypted
-    assert follow_up.input_items[4]["call_id"] == "call_reasoned"
+    assert "phase" not in follow_up.input_items[3]
+    assert follow_up.input_items[4]["type"] == "message"
+    assert follow_up.input_items[4]["role"] == "assistant"
     assert follow_up.input_items[4]["phase"] == "commentary"
     assert follow_up.input_items[5]["call_id"] == "call_reasoned"
+    assert "phase" not in follow_up.input_items[5]
+    assert follow_up.input_items[6]["call_id"] == "call_reasoned"
     assert first.routing[0].provider_call_id == "call_reasoned"
 
 
@@ -675,6 +685,101 @@ def test_no_tool_planner_answer_is_terminal_without_synthesizer_route() -> None:
     assert result.routing[0].model_role == PLANNER_ROLE
 
 
+@pytest.mark.parametrize(
+    "output_items",
+    [
+        (
+            {
+                "type": "web_search_call",
+                "queries": ["chlorophyll"],
+            },
+        ),
+        (
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Use this answer."}],
+            },
+        ),
+    ],
+)
+def test_no_tool_planner_output_items_are_validated(
+    output_items: tuple[dict[str, object], ...],
+) -> None:
+    planner = OpenAIResponsesPlanner(
+        _config(),
+        ScriptedResponsesClient(
+            [
+                NormalizedResponse(
+                    response_id="resp_no_tool_malformed_output",
+                    status="completed",
+                    output_text="I cannot answer from the provided sources.",
+                    output_items=output_items,
+                )
+            ]
+        ),
+    )
+
+    with pytest.raises(ProviderAdapterError):
+        planner.decide(
+            [{"role": "user", "content": "Can you answer without evidence?"}],
+            steps=[],
+            tools=(_search_tool(),),
+        )
+
+
+@pytest.mark.parametrize(
+    "output_items",
+    [
+        (
+            {
+                "type": "web_search_call",
+                "queries": ["chlorophyll"],
+            },
+        ),
+        (
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Use this answer."}],
+            },
+        ),
+    ],
+)
+def test_synthesizer_output_items_are_validated(
+    output_items: tuple[dict[str, object], ...],
+) -> None:
+    client = ScriptedResponsesClient(
+        [
+            _tool_call("rag.search", {"query": "chlorophyll"}),
+            NormalizedResponse(
+                response_id="resp_synth_malformed_output",
+                status="completed",
+                output_text="Chlorophyll captures light [1].",
+                output_items=output_items,
+            ),
+        ]
+    )
+    executor = RecordingExecutor()
+    runner = AgentRunner(
+        planner=OpenAIResponsesPlanner(_config(), client),
+        tools=(_search_tool(),),
+        tool_executor=executor,
+        security_policy=DefaultSecurityPolicy(),
+    )
+
+    result = runner.run(
+        RunRequest(
+            question="How does chlorophyll capture light?",
+            run_id="synth-malformed-output-items",
+        )
+    )
+
+    assert result.stop_reason.value == "llm_error"
+    assert executor.calls == [("rag.search", {"query": "chlorophyll"})]
+    assert len(client.calls) == 2
+
+
 def test_output_text_is_bounded_locally() -> None:
     planner = OpenAIResponsesPlanner(
         _config(max_output_tokens=1),
@@ -756,12 +861,224 @@ def test_replay_limits_fail_closed_without_dropping_or_truncating_items() -> Non
             ]
         ),
     )
-    with pytest.raises(ProviderAdapterError, match="missing from replay"):
+    with pytest.raises(ProviderAdapterError, match="replay mismatch"):
         mismatched_replay.decide(
             [{"role": "user", "content": "missing replay call"}],
             steps=[],
             tools=(_search_tool(),),
         )
+
+
+def test_direct_final_output_items_use_replay_size_limits() -> None:
+    planner = OpenAIResponsesPlanner(
+        _config(),
+        ScriptedResponsesClient(
+            [
+                NormalizedResponse(
+                    response_id="resp_huge_direct_message",
+                    status="completed",
+                    output_text="I cannot answer from the provided sources.",
+                    output_items=(
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [
+                                {"type": "output_text", "text": "x" * 100_000}
+                            ],
+                        },
+                    ),
+                )
+            ]
+        ),
+    )
+
+    with pytest.raises(ProviderAdapterError, match="too large"):
+        planner.decide(
+            [{"role": "user", "content": "Can you answer without evidence?"}],
+            steps=[],
+            tools=(_search_tool(),),
+        )
+
+
+def test_direct_tool_output_items_use_replay_size_limits_before_execution() -> None:
+    executor = RecordingExecutor()
+    runner = AgentRunner(
+        planner=OpenAIResponsesPlanner(
+            _config(),
+            ScriptedResponsesClient(
+                [
+                    NormalizedResponse(
+                        response_id="resp_huge_direct_tool_message",
+                        status="completed",
+                        function_calls=(
+                            NormalizedFunctionCall(
+                                call_id="call_huge_history",
+                                name="rag.search",
+                                arguments_json='{"query": "chlorophyll"}',
+                            ),
+                        ),
+                        output_items=(
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "output_text", "text": "x" * 100_000}
+                                ],
+                            },
+                            {
+                                "type": "function_call",
+                                "call_id": "call_huge_history",
+                                "name": "rag.search",
+                                "arguments": '{"query": "chlorophyll"}',
+                            },
+                        ),
+                    )
+                ]
+            ),
+        ),
+        tools=(_search_tool(),),
+        tool_executor=executor,
+        security_policy=DefaultSecurityPolicy(),
+    )
+
+    result = runner.run(
+        RunRequest(
+            question="How does chlorophyll capture light?",
+            run_id="huge-direct-tool-output-items",
+        )
+    )
+
+    assert result.stop_reason.value == "llm_error"
+    assert executor.calls == []
+
+
+def test_replay_projection_fails_closed_on_excessive_depth() -> None:
+    nested: object = "leaf"
+    for _ in range(1200):
+        nested = [nested]
+
+    with pytest.raises(ProviderAdapterError, match="nesting"):
+        normalize_response(
+            {
+                "id": "resp_deep_replay",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_deep",
+                        "encrypted_content": "opaque",
+                        "summary": nested,
+                    },
+                ],
+            }
+        )
+
+
+def test_replay_projection_fails_closed_on_cumulative_text_budget() -> None:
+    with pytest.raises(ProviderAdapterError, match="text too large"):
+        normalize_response(
+            {
+                "id": "resp_text_budget",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_text_budget",
+                        "encrypted_content": "opaque",
+                        "summary": ["x" * 8000 for _ in range(5)],
+                    },
+                ],
+            }
+        )
+
+
+def test_replay_projection_bounds_mapping_keys() -> None:
+    oversized_key = "k" * 100_000
+    with pytest.raises(ProviderAdapterError, match="mapping key too large"):
+        normalize_response(
+            {
+                "id": "resp_oversized_mapping_key",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "Checking notes.",
+                                "annotations": [{oversized_key: "value"}],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+    with pytest.raises(ProviderAdapterError, match="mapping key malformed"):
+        normalize_response(
+            {
+                "id": "resp_non_string_mapping_key",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "Checking notes.",
+                                "annotations": [{1: "numeric", "1": "string"}],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+
+def test_replay_mapping_keys_share_cumulative_text_budget() -> None:
+    annotations = [{str(index) * 8000: ""} for index in range(1, 6)]
+    with pytest.raises(ProviderAdapterError, match="text too large"):
+        normalize_response(
+            {
+                "id": "resp_mapping_key_text_budget",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "Checking notes.",
+                                "annotations": annotations,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+
+def test_replay_projection_fails_closed_on_sdk_object_cycles() -> None:
+    block = SimpleNamespace(type="output_text", text="Checking notes.")
+    block.annotations = [block]
+    raw = SimpleNamespace(
+        id="resp_cyclic_sdk",
+        status="completed",
+        output_text="",
+        output=[
+            SimpleNamespace(
+                type="message",
+                role="assistant",
+                content=[block],
+            )
+        ],
+    )
+
+    with pytest.raises(ProviderAdapterError, match="cycle"):
+        normalize_response(raw)
 
 
 def test_malformed_replay_items_fail_closed() -> None:
@@ -797,6 +1114,295 @@ def test_malformed_replay_items_fail_closed() -> None:
                     },
                 ],
             }
+        )
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Use the tool."}],
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_ok",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ],
+        [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": "Checking notes.",
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_ok",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ],
+        [
+            {
+                "type": "function_call",
+                "call_id": "call_ok",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ],
+        [
+            {
+                "type": "function_call",
+                "call_id": "call_ok",
+                "name": "rag.search",
+                "arguments": {"query": "chlorophyll"},
+            },
+        ],
+        [
+            {
+                "type": "reasoning",
+                "encrypted_content": "opaque",
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_ok",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ],
+    ],
+)
+def test_malformed_replay_item_schema_fails_closed(
+    output: list[dict[str, object]],
+) -> None:
+    with pytest.raises(ProviderAdapterError, match="replay"):
+        normalize_response(
+            {
+                "id": "resp_malformed_replay_schema",
+                "status": "completed",
+                "output": output,
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        [
+            {
+                "type": "message",
+                "role": "assistant",
+                "phase": {"value": "commentary"},
+                "content": [{"type": "output_text", "text": "Checking notes."}],
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_ok",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ],
+        [
+            {
+                "type": "reasoning",
+                "id": "rs_wrong_phase",
+                "phase": "commentary",
+                "encrypted_content": "opaque",
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_ok",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ],
+        [
+            {
+                "type": "function_call",
+                "phase": "commentary",
+                "call_id": "call_ok",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ],
+    ],
+)
+def test_invalid_replay_phase_fails_closed_before_tool_execution(
+    output: list[dict[str, object]],
+) -> None:
+    with pytest.raises(ProviderAdapterError, match="phase"):
+        normalize_response(
+            {
+                "id": "resp_invalid_phase",
+                "status": "completed",
+                "output": output,
+            }
+        )
+
+
+def test_incomplete_normalized_function_call_replay_fails_before_execution() -> None:
+    executor = RecordingExecutor()
+    runner = AgentRunner(
+        planner=OpenAIResponsesPlanner(
+            _config(),
+            ScriptedResponsesClient(
+                [
+                    NormalizedResponse(
+                        response_id="resp_incomplete_normalized_replay",
+                        status="completed",
+                        function_calls=(
+                            NormalizedFunctionCall(
+                                call_id="call_missing_fields",
+                                name="rag.search",
+                                arguments_json='{"query": "chlorophyll"}',
+                            ),
+                        ),
+                        output_items=(
+                            {
+                                "type": "function_call",
+                                "call_id": "call_missing_fields",
+                            },
+                        ),
+                    )
+                ]
+            ),
+        ),
+        tools=(_search_tool(),),
+        tool_executor=executor,
+        security_policy=DefaultSecurityPolicy(),
+    )
+
+    result = runner.run(
+        RunRequest(
+            question="How does chlorophyll capture light?",
+            run_id="incomplete-normalized-replay",
+        )
+    )
+
+    assert result.stop_reason.value == "llm_error"
+    assert executor.calls == []
+
+
+@pytest.mark.parametrize(
+    "output_items",
+    [
+        (
+            {
+                "type": "function_call",
+                "call_id": "call_linked",
+                "name": "learner.get_profile",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ),
+        (
+            {
+                "type": "function_call",
+                "call_id": "call_linked",
+                "name": "rag.search",
+                "arguments": '{"query": "glucose"}',
+            },
+        ),
+        (
+            {
+                "type": "function_call",
+                "call_id": "call_linked",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_extra",
+                "name": "learner.get_profile",
+                "arguments": "{}",
+            },
+        ),
+        (
+            {
+                "type": "function_call",
+                "call_id": "call_linked",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_linked",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ),
+    ],
+)
+def test_normalized_function_call_replay_mismatch_fails_before_execution(
+    output_items: tuple[dict[str, object], ...],
+) -> None:
+    executor = RecordingExecutor()
+    runner = AgentRunner(
+        planner=OpenAIResponsesPlanner(
+            _config(),
+            ScriptedResponsesClient(
+                [
+                    NormalizedResponse(
+                        response_id="resp_mismatched_normalized_replay",
+                        status="completed",
+                        function_calls=(
+                            NormalizedFunctionCall(
+                                call_id="call_linked",
+                                name="rag.search",
+                                arguments_json='{"query": "chlorophyll"}',
+                            ),
+                        ),
+                        output_items=output_items,
+                    )
+                ]
+            ),
+        ),
+        tools=(_search_tool(), _profile_tool()),
+        tool_executor=executor,
+        security_policy=DefaultSecurityPolicy(),
+    )
+
+    result = runner.run(
+        RunRequest(
+            question="How does chlorophyll capture light?",
+            run_id="mismatched-normalized-replay",
+        )
+    )
+
+    assert result.stop_reason.value == "llm_error"
+    assert executor.calls == []
+
+
+def test_normalized_replay_phase_fails_closed_before_tool_execution() -> None:
+    response = NormalizedResponse(
+        response_id="resp_invalid_normalized_phase",
+        status="completed",
+        function_calls=(
+            NormalizedFunctionCall(
+                call_id="call_invalid_phase",
+                name="rag.search",
+                arguments_json='{"query": "chlorophyll"}',
+            ),
+        ),
+        output_items=(
+            {
+                "type": "function_call",
+                "phase": "commentary",
+                "call_id": "call_invalid_phase",
+                "name": "rag.search",
+                "arguments": '{"query": "chlorophyll"}',
+            },
+        ),
+    )
+    planner = OpenAIResponsesPlanner(_config(), ScriptedResponsesClient([response]))
+
+    with pytest.raises(ProviderAdapterError, match="phase"):
+        planner.decide(
+            [{"role": "user", "content": "How does chlorophyll capture light?"}],
+            steps=[],
+            tools=(_search_tool(),),
         )
 
 
@@ -1065,6 +1671,17 @@ def test_normalize_response_accepts_sdk_objects_without_retaining_raw_payload() 
         output_text="",
         output=[
             SimpleNamespace(
+                type="message",
+                role="assistant",
+                phase="final_answer",
+                content=[
+                    SimpleNamespace(
+                        type="output_text",
+                        text="I can answer from the grounded notes.",
+                    )
+                ],
+            ),
+            SimpleNamespace(
                 type="function_call",
                 call_id="call_obj",
                 name="rag.search",
@@ -1078,6 +1695,14 @@ def test_normalize_response_accepts_sdk_objects_without_retaining_raw_payload() 
     assert json.loads(normalized.function_calls[0].arguments_json) == {
         "query": "chlorophyll"
     }
+    assert normalized.output_items[0]["role"] == "assistant"
+    assert normalized.output_items[0]["phase"] == "final_answer"
+    assert normalized.output_items[0]["content"] == [
+        {
+            "type": "output_text",
+            "text": "I can answer from the grounded notes.",
+        }
+    ]
     dumped = json.dumps(normalized, default=str)
     assert "SimpleNamespace" not in dumped
 
@@ -1097,3 +1722,19 @@ def test_build_official_client_without_sdk_is_configuration_error(
     )
     with pytest.raises(LiveConfigurationError, match="optional"):
         build_official_responses_client(_config())
+
+
+def test_build_official_client_requires_responses_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    legacy_sdk = SimpleNamespace(OpenAI=lambda **kwargs: SimpleNamespace())
+    monkeypatch.setattr(
+        "agent_coach.provider.openai_responses._import_openai",
+        lambda: legacy_sdk,
+    )
+
+    with pytest.raises(LiveConfigurationError, match="Responses API") as raised:
+        build_official_responses_client(_config())
+
+    assert raised.value.code == "unsupported_sdk"
+    assert LIVE_KEY not in str(raised.value)

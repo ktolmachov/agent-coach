@@ -540,7 +540,7 @@ Stop:
 
 ## D9 - Provider-Native Function Calling and Model Routing
 
-Status: HOLD pending independent promotion review.
+Status: COMPLETE locally; HOLD pending independent promotion review.
 
 Inputs:
 
@@ -575,8 +575,10 @@ Core contract evolution:
 - `model_routes` is added to a run trace only when routing metadata exists, so
   mock golden projections stay stable.
 
-D9 HOLD remediation evidence:
+D9 completion evidence:
 
+- the optional live dependency requires OpenAI Python SDK 1.66 or newer, and
+  composition rejects installed clients without callable `responses.create`;
 - stateless Responses requests include `reasoning.encrypted_content`;
 - replay preserves valid provider `response.output` and fails closed for
   oversized, malformed or mismatched replay-critical items;
@@ -598,9 +600,21 @@ D9 HOLD remediation evidence:
   coerced to zero;
 - unsupported provider `response.output` item types fail closed before tool
   execution;
+- supported provider `response.output` item types are validated against their
+  replay-critical schemas before tool execution;
+- completed planner and synthesizer responses validate saved output items
+  before accepting either a tool call or final answer;
+- raw, SDK-object and direct normalized replay items share bounded projection
+  limits for per-field text, cumulative text, node count, depth and cycles;
+- nested replay mapping keys must be strings and count toward the same node and
+  cumulative-text limits, so key coercion cannot bypass replay bounds;
+- replay `function_call` items must exactly match normalized function calls by
+  `call_id`, `name` and `arguments`, with no extras or duplicates;
 - no-tool planner responses are documented and tested as terminal planner
   answers or abstentions, not synthesizer evidence;
-- stateless replay preserves assistant output item `phase` values unchanged;
+- stateless replay preserves valid assistant message item `phase` values
+  unchanged and rejects malformed, misplaced or non-assistant message phase
+  values;
 - secret-like API base hostnames are rejected before public projection.
 
 Non-goals:

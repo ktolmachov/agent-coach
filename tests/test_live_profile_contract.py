@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import json
 import math
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -118,6 +119,20 @@ def test_missing_sdk_without_injected_client_fails_closed(
             "How does photosynthesis work?",
             config=_config(),
         )
+
+
+def test_live_extra_requires_a_responses_capable_openai_sdk() -> None:
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text("utf-8"))
+    requirements = pyproject["project"]["optional-dependencies"]["live"]
+    openai_requirement = next(
+        requirement
+        for requirement in requirements
+        if requirement.startswith("openai>=")
+    )
+    lower_bound = openai_requirement.removeprefix("openai>=").split(",", 1)[0]
+
+    assert tuple(int(part) for part in lower_bound.split(".")) >= (1, 66)
+    assert ",<3" in openai_requirement
 
 
 def test_live_profile_does_not_fallback_to_mock() -> None:
