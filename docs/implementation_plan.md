@@ -745,3 +745,102 @@ Rollback:
 Stop:
 
 - stop after the D10 promotion report. Do not start D11.
+
+## D11 - Eval Gate, SOP, Review Kit and Clean Release Evidence
+
+Status: HOLD pending opt-in live provider evidence and clean fresh-clone release
+evidence.
+
+Inputs:
+
+- promoted D8 local-vector retrieval;
+- promoted D9 provider-native function-calling adapter;
+- promoted D10 stable phase trace, metrics and grounding proof;
+- D7 review-kit and release-gate materials, still pending independent clean
+  release review.
+
+Write-set:
+
+- versioned offline eval suite and KPI thresholds;
+- deterministic offline eval runner and focused tests;
+- generated Tool SOP and drift check;
+- review-kit, README, scripts and implementation-plan documentation updates;
+- public release gate awareness for D11 eval/SOP artifacts.
+
+Implemented artifacts:
+
+- `src/agent_coach/eval/`;
+- `src/agent_coach/data/diploma_eval_cases.json`;
+- `scripts/run_eval_gate.py`;
+- `tests/test_eval_gate.py`;
+- `docs/eval_gate.md`;
+- `docs/tool_sop.md`;
+- D11 documentation updates in `README.md`, `docs/review_kit.md`,
+  `scripts/README.md` and this implementation plan;
+- public release gate checks for eval-suite validity and generated Tool SOP
+  drift.
+
+D11 micro-slice evidence:
+
+- 27 frozen public synthetic cases are present and schema-valid;
+- KPI thresholds are fixed before any live evidence file is accepted;
+- offline eval gate reports 100% pass rate on non-retrieval-top1 mock, Core,
+  local-vector negative and scripted provider-contract golden cases;
+- retrieval top-1 accuracy is measured across positive eval cases and must stay
+  at or above 80%;
+- invalid or unknown tool executions, security assertion failures, hidden
+  writes and grounded answers without citation must remain 0;
+- active live cost cap with unknown pricing fails closed;
+- generated Tool SOP is derived from current advertised `ToolSpec` values and
+  compared to the committed snapshot;
+- offline `gate_status` is separate from `promotion_status`;
+- `promotion_status` remains fail-closed until live evidence, clean worktree
+  state and clean fresh-clone release evidence are all valid; minimal
+  marker-only evidence files are invalid.
+
+Non-goals:
+
+- no release tag;
+- no production auth, durable state, production MCP or write-enabled tools;
+- no new orchestration framework;
+- no provider network smoke by default;
+- no claim that offline scripted provider checks are live provider evidence;
+- no final clean-clone evidence until explicitly run from a reviewed clean
+  commit.
+
+Promotion thresholds:
+
+- 20-30 frozen cases present and schema-valid;
+- offline golden gate 100% on non-retrieval-top1 golden cases;
+- retrieval top-1 at least 80%;
+- live task success at least 80% or explicit
+  `HOLD: live provider evidence unavailable`;
+- valid live evidence must bind to HEAD, declare live-provider opt-in, include
+  at least five live cases and public artifact labels;
+- valid clean release evidence must bind to HEAD and include PASS/exit-code-0
+  fresh-clone, public release gate and offline eval gate command records;
+- all security, hidden-write and grounding violations equal 0;
+- README/SOP/evidence drift checks pass;
+- full fresh-clone suite passes before final promotion;
+- release evidence is clean and immutable;
+- no unresolved misleading claims.
+
+Checks:
+
+- focused eval-gate tests;
+- release-gate regression tests;
+- D11 eval CLI;
+- public release gate;
+- Ruff and compileall on touched Python paths;
+- targeted mock/retrieval/live/profile regressions where affected;
+- `git diff --check`.
+
+Rollback:
+
+- remove the D11 eval package, packaged eval suite, eval script, eval tests,
+  generated SOP and D11 documentation updates; keep D1-D10 intact.
+
+Stop:
+
+- stop after the D11 promotion report. Do not create a release tag
+  automatically.

@@ -29,6 +29,7 @@ Implemented so far:
 - optional live-provider profile with official OpenAI Responses function
   calling and planner/synthesizer routing. The default profile remains
   deterministic mock.
+- D11 offline eval gate with frozen KPI thresholds and generated Tool SOP.
 
 The Mock API is a deterministic local review surface. It has no production
 auth, no production data and no durable production state. Local-vector
@@ -64,6 +65,7 @@ python scripts/check_contract_export.py
 python scripts/check_openapi_snapshot.py
 python scripts/check_drift_gate.py
 python scripts/check_public_release.py
+python scripts/run_eval_gate.py
 ```
 
 Run one deterministic offline mock scenario from Python:
@@ -95,6 +97,19 @@ python scripts/run_diploma_demo.py
 python scripts/run_diploma_demo.py --output ../agent-coach-diploma-demo.json
 ```
 
+Run the D11 deterministic offline eval gate and Tool SOP drift check:
+
+```bash
+python scripts/run_eval_gate.py
+python scripts/run_eval_gate.py --print-tool-sop
+```
+
+The eval report freezes 27 public synthetic cases before any optional live
+evidence is considered. `gate_status: PASS` means the offline gate passed;
+`promotion_status: HOLD` remains expected until opt-in live evidence, a clean
+worktree and clean fresh-clone release evidence are all present and schema-valid.
+Marker-only evidence files are rejected.
+
 The runtime dependencies are limited to the local API layer. Agent Core and mock
 adapter modules remain framework-independent and do not import FastAPI.
 
@@ -120,6 +135,8 @@ private source checkout.
 - [Mock adapters](docs/mock_adapters.md)
 - [Local vector memory](docs/retrieval.md)
 - [Live provider profile](docs/live_profile.md)
+- [D11 eval gate](docs/eval_gate.md)
+- [Tool SOP](docs/tool_sop.md)
 - [Adapter boundary ADR](docs/adr/0002-diploma-live-adapter-boundary.md)
 - [Demo status](docs/demo.md)
 - [Diploma review kit](docs/review_kit.md)

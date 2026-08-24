@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_coach.api import create_app
+from agent_coach.eval import build_tool_sop_markdown, load_eval_suite
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DRIFT_GATE_PATH = REPO_ROOT / "scripts" / "check_drift_gate.py"
@@ -57,6 +58,10 @@ def _file_uri_win(drive: str, *parts: str) -> str:
 
 def _repo_relative_code_fragment(*parts: str) -> str:
     return "- `" + "/".join(parts) + "`;\n"
+
+
+def _repo_relative_inline_fragment(*parts: str, suffix: str) -> str:
+    return "`" + "/".join(parts) + "`" + suffix + "\n"
 
 
 def _demo_secret() -> str:
@@ -199,6 +204,21 @@ ALLOWED_PRIVATE_PATH_FRAGMENTS = {
             "data",
             "diploma_knowledge_base.json",
         ),
+        _repo_relative_code_fragment(
+            "src",
+            "agent_coach",
+            "data",
+            "diploma_eval_cases.json",
+        ),
+    },
+    Path("docs/eval_gate.md"): {
+        _repo_relative_inline_fragment(
+            "src",
+            "agent_coach",
+            "data",
+            "diploma_eval_cases.json",
+            suffix=". It contains 27 public synthetic",
+        ),
     },
 }
 BLOCKED_RELEASE_ARTIFACT_SUFFIXES = (
@@ -254,6 +274,7 @@ def build_failures(repo_root: Path = REPO_ROOT) -> list[str]:
     failures.extend(_check_readme_claims(repo_root, files))
     failures.extend(_check_markdown_links(repo_root, files))
     failures.extend(_check_openapi_snapshot(repo_root))
+    failures.extend(_check_d11_eval_artifacts(repo_root))
     failures.extend(_check_evidence_artifacts(repo_root, files))
     failures.extend(_check_release_artifacts(repo_root, files))
     failures.extend(_check_dirty_generated_artifacts(repo_root))
@@ -270,6 +291,8 @@ def _check_required_files(repo_root: Path) -> list[str]:
         "docs/review_kit.md",
         "docs/release_checklist.md",
         "docs/dependency_notices.md",
+        "docs/eval_gate.md",
+        "docs/tool_sop.md",
         "docs/openapi.json",
         "contracts/export_manifest.json",
     ]
@@ -361,6 +384,22 @@ def _check_openapi_snapshot(repo_root: Path) -> list[str]:
     if actual != expected:
         return ["docs/openapi.json is not current"]
     return []
+
+
+def _check_d11_eval_artifacts(repo_root: Path) -> list[str]:
+    failures = []
+    suite_path = (
+        repo_root / "src" / "agent_coach" / "data" / "diploma_eval_cases.json"
+    )
+    try:
+        load_eval_suite(suite_path)
+    except (OSError, ValueError) as exc:
+        failures.append(f"D11 eval suite is invalid: {exc}")
+    expected_sop = build_tool_sop_markdown()
+    actual_sop = (repo_root / "docs" / "tool_sop.md").read_text(encoding="utf-8")
+    if actual_sop != expected_sop:
+        failures.append("docs/tool_sop.md is not current")
+    return failures
 
 
 def _check_evidence_artifacts(repo_root: Path, files: Iterable[Path]) -> list[str]:

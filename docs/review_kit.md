@@ -53,6 +53,35 @@ Run a specific scenario:
 python scripts/run_diploma_demo.py --scenario prompt_injection
 ```
 
+## Literal Review Example
+
+Input:
+
+```text
+Explain photosynthesis and suggest practice.
+```
+
+Reason -> Act -> Observe -> result:
+
+```text
+Reason: load the synthetic learner context.
+Act: learner.get_profile({})
+Observe: public demo preferences only.
+Reason: retrieve grounded source evidence.
+Act: rag.search({"query": "photosynthesis energy glucose", "top_k": 2})
+Observe: photosynthesis-basics.md with cite index [1].
+Reason: create a bounded practice branch.
+Act: quiz.generate({"topic": "photosynthesis", "learning_mode": "practice"})
+Observe: two synthetic practice questions.
+Result: Photosynthesis converts light energy into chemical energy stored in
+glucose [1]. Practice next with two retrieval questions.
+```
+
+The public trace includes sources, five stable phases, tool names, token/time
+metrics and cost status. Mock and local-vector profiles report `local_zero`
+cost. Live-provider traces report unknown cloud cost unless a future reviewed
+pricing table exists.
+
 Write reproducible JSON evidence:
 
 ```bash
@@ -101,16 +130,22 @@ python scripts/check_openapi_snapshot.py
 
 ## Mock vs Production
 
-| Concern | Diploma mock | Production replacement |
+| Concern | Mock | Local vector | Optional live provider |
 | --- | --- | --- |
-| Data | Synthetic public fixtures | Out of scope |
-| Auth | None, localhost-only review | Out of scope |
-| State | Ephemeral in-memory store | Out of scope |
-| Tools | Read-only deterministic subset | Out of scope |
-| Deployment | Local reviewer process | Out of scope |
+| Data | Synthetic public fixtures | Packaged synthetic public corpus | Same local corpus plus provider text |
+| Auth | None, localhost-only review | None | API key supplied outside Git/chat/evidence |
+| State | Ephemeral in-memory store | In-process vector index | Stateless Responses requests |
+| Tools | Read-only deterministic subset | `rag.search` | `rag.search`, `learner.get_profile` |
+| Models | Scripted planner | Scripted local planner | Planner and synthesizer roles |
+| Evidence | Deterministic | Deterministic | Opt-in and non-deterministic |
 
 Future production work requires a separate architecture decision before any
 network, durable-state, authentication or ownership cutover work begins.
+
+Native function calling is demonstrated by the optional live-provider adapter:
+frozen `ToolSpec` schemas are converted to Responses function tools, one
+provider-native function call is accepted at a time, malformed or unknown calls
+fail closed, and raw provider payloads are not stored in public traces.
 
 ## Source Provenance
 
@@ -137,6 +172,20 @@ Run the public release gate:
 python scripts/check_public_release.py
 ```
 
+Run the D11 eval gate:
+
+```bash
+python scripts/run_eval_gate.py
+```
+
+The gate freezes 27 public synthetic cases and KPI thresholds before any live
+evidence is supplied. It also checks the generated Tool SOP snapshot in
+`docs/tool_sop.md`.
+Promotion remains fail-closed unless live evidence identifies the current
+commit, live-provider opt-in, at least five live cases and public artifact
+labels, and clean release evidence records PASS/exit-code-0 fresh-clone,
+public-release and offline-eval commands.
+
 Run the full public check sequence:
 
 ```bash
@@ -147,6 +196,7 @@ python scripts/check_contract_export.py
 python scripts/check_openapi_snapshot.py
 python scripts/check_drift_gate.py
 python scripts/check_public_release.py
+python scripts/run_eval_gate.py
 ```
 
 The release gate checks the publishable/runtime surface, including tests, for

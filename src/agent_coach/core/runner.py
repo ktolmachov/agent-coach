@@ -650,7 +650,7 @@ class AgentRunner:
             _close_open_step_durations(steps, state, now)
         cost_status, total_cost = _cost_projection(state)
         trace: dict[str, object] = {
-            "run_id": request.run_id,
+            "run_id": _trace_run_id(request),
             "stop_reason": reason.value,
             "stop_detail": detail,
             "step_count": state.step_count,
@@ -699,7 +699,7 @@ class AgentRunner:
         self, request: RunRequest, reason: StopReason, detail: str
     ) -> AgentRunResult:
         trace = {
-            "run_id": request.run_id,
+            "run_id": _trace_run_id(request),
             "stop_reason": reason.value,
             "stop_detail": detail,
             "step_count": 0,
@@ -817,6 +817,12 @@ def _record_routing(
         state.model_routes.append(projection)
         if projection["backend"] != "local":
             state.saw_unpriced_cloud_usage = True
+
+
+def _trace_run_id(request: RunRequest) -> str | None:
+    if request.run_id is None:
+        return None
+    return sanitize_identifier(request.run_id)
 
 
 def _budget_message(

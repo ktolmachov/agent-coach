@@ -272,6 +272,11 @@ def _write_required_files(root: Path) -> None:
         "# Dependencies\n",
         encoding="utf-8",
     )
+    (root / "docs" / "eval_gate.md").write_text("# Eval\n", encoding="utf-8")
+    (root / "docs" / "tool_sop.md").write_text(
+        gate.build_tool_sop_markdown(),
+        encoding="utf-8",
+    )
     (root / "docs" / "openapi.json").write_text(
         json.dumps(create_app().openapi(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

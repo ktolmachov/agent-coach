@@ -49,3 +49,19 @@ The release gate validates the publishable/runtime surface for private local
 path markers, required review files, README safety language, current OpenAPI,
 internal Markdown links and tracked or dirty generated release artifacts. The
 demo script emits deterministic JSON evidence for one synthetic mock scenario.
+
+D11 adds the offline eval gate and generated Tool SOP snapshot:
+
+```bash
+python scripts/run_eval_gate.py
+python scripts/run_eval_gate.py --output ../agent-coach-d11-eval-report.json
+python scripts/run_eval_gate.py --print-tool-sop
+```
+
+The default eval gate is deterministic and offline. It reports
+`gate_status: PASS` separately from `promotion_status`; promotion remains
+`HOLD` until live evidence, a clean worktree and clean fresh-clone release
+evidence are all valid. Minimal marker-only evidence files are invalid; live
+evidence must identify the current commit, live profile opt-in and public
+artifact labels, and clean release evidence must include PASS/exit-code-0
+command records for the required checks.
