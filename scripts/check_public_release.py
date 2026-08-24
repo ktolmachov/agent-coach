@@ -352,10 +352,10 @@ def _check_publishable_text(repo_root: Path, files: Iterable[Path]) -> list[str]
         if text is None:
             continue
         if _private_path_hits(path, absolute_path, text):
-            failures.append(f"private local path marker in {path}")
+            failures.append(f"private local path marker in {_display_path(path)}")
         for hit in _secret_hits(text):
             if not _is_allowed_synthetic_secret(path, hit):
-                failures.append(f"secret-like token in {path}")
+                failures.append(f"secret-like token in {_display_path(path)}")
                 break
     return failures
 
@@ -365,7 +365,8 @@ def _check_sensitive_containers(files: Iterable[Path]) -> list[str]:
     for path in files:
         if _is_sensitive_container(path):
             failures.append(
-                f"sensitive credential container is not release-safe: {path}"
+                "sensitive credential container is not release-safe: "
+                f"{_display_path(path)}"
             )
     return failures
 
@@ -381,7 +382,10 @@ def _check_readme_claims(repo_root: Path, files: Iterable[Path]) -> list[str]:
         text = (repo_root / path).read_text(encoding="utf-8").casefold()
         for claim in PRODUCTION_CLAIMS:
             if claim in text:
-                failures.append(f"production readiness claim in {path}: {claim}")
+                failures.append(
+                    "production readiness claim in "
+                    f"{_display_path(path)}: {claim}"
+                )
     return failures
 
 
@@ -400,10 +404,16 @@ def _check_markdown_links(repo_root: Path, files: Iterable[Path]) -> list[str]:
             try:
                 target_path.relative_to(repo_root)
             except ValueError:
-                failures.append(f"markdown link leaves repository: {path} -> {target}")
+                failures.append(
+                    "markdown link leaves repository: "
+                    f"{_display_path(path)} -> {target}"
+                )
                 continue
             if not target_path.exists():
-                failures.append(f"markdown link target missing: {path} -> {target}")
+                failures.append(
+                    "markdown link target missing: "
+                    f"{_display_path(path)} -> {target}"
+                )
     return failures
 
 
@@ -449,10 +459,15 @@ def _check_evidence_artifacts(repo_root: Path, files: Iterable[Path]) -> list[st
             else:
                 payload = json.loads((repo_root / path).read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            failures.append(f"malformed release evidence {path}: {exc.msg}")
+            failures.append(
+                f"malformed release evidence {_display_path(path)}: {exc.msg}"
+            )
             continue
         except (OSError, UnicodeDecodeError, ValueError) as exc:
-            failures.append(f"malformed release evidence {path}: {trace_text(exc)}")
+            failures.append(
+                "malformed release evidence "
+                f"{_display_path(path)}: {trace_text(exc)}"
+            )
             continue
         failures.extend(_validate_evidence_payload(path, payload, head))
     return failures
@@ -461,22 +476,31 @@ def _check_evidence_artifacts(repo_root: Path, files: Iterable[Path]) -> list[st
 def _validate_evidence_payload(
     path: Path, payload: Any, head: str
 ) -> list[str]:
+    display_path = _display_path(path)
     if not isinstance(payload, dict):
-        return [f"release evidence must be a JSON object: {path}"]
+        return [f"release evidence must be a JSON object: {display_path}"]
     if payload.get("schema_version") == LIVE_EVAL_PUBLIC_SCHEMA_VERSION:
         return _validate_live_eval_public_payload(path, payload)
     failures = []
     if payload.get("schema_version") != EVIDENCE_SCHEMA_VERSION:
-        failures.append(f"unexpected release evidence schema in {path}")
+        failures.append(f"unexpected release evidence schema in {display_path}")
     if payload.get("commit") != head:
-        failures.append(f"release evidence commit does not match HEAD: {path}")
+        failures.append(
+            f"release evidence commit does not match HEAD: {display_path}"
+        )
     if payload.get("worktree_dirty") is not False:
-        failures.append(f"release evidence was generated from a dirty worktree: {path}")
+        failures.append(
+            f"release evidence was generated from a dirty worktree: {display_path}"
+        )
     if payload.get("adapter_profile") != "mock":
-        failures.append(f"release evidence must use mock adapter profile: {path}")
+        failures.append(
+            f"release evidence must use mock adapter profile: {display_path}"
+        )
     result = payload.get("result")
     if not isinstance(result, dict) or result.get("success") is not True:
-        failures.append(f"release evidence does not contain successful result: {path}")
+        failures.append(
+            f"release evidence does not contain successful result: {display_path}"
+        )
     return failures
 
 
@@ -484,7 +508,7 @@ def _validate_live_eval_public_payload(
     path: Path, payload: dict[str, Any]
 ) -> list[str]:
     return [
-        f"{failure}: {path}"
+        f"{failure}: {_display_path(path)}"
         for failure in validate_live_eval_public_payload(payload)
     ]
 
@@ -523,9 +547,14 @@ def _check_release_artifacts(repo_root: Path, files: Iterable[Path]) -> list[str
     failures = []
     for path in files:
         if path.suffix in BLOCKED_RELEASE_ARTIFACT_SUFFIXES:
-            failures.append(f"tracked generated artifact is not release-safe: {path}")
+            failures.append(
+                "tracked generated artifact is not release-safe: "
+                f"{_display_path(path)}"
+            )
         if any(part in BLOCKED_RELEASE_ARTIFACT_PARTS for part in path.parts):
-            failures.append(f"tracked cache artifact is not release-safe: {path}")
+            failures.append(
+                f"tracked cache artifact is not release-safe: {_display_path(path)}"
+            )
     return failures
 
 
@@ -533,11 +562,12 @@ def _check_dirty_generated_artifacts(repo_root: Path) -> list[str]:
     failures = []
     for line in _git_output(repo_root, "status", "--short").splitlines():
         raw_path = line[3:].strip()
+        display_path = raw_path.replace("\\", "/")
         path = Path(raw_path)
         if path.suffix in BLOCKED_RELEASE_ARTIFACT_SUFFIXES:
-            failures.append(f"dirty generated artifact: {raw_path}")
+            failures.append(f"dirty generated artifact: {display_path}")
         if any(part in BLOCKED_RELEASE_ARTIFACT_PARTS for part in path.parts):
-            failures.append(f"dirty cache artifact: {raw_path}")
+            failures.append(f"dirty cache artifact: {display_path}")
     return failures
 
 
@@ -553,6 +583,10 @@ def _is_sensitive_container(path: Path) -> bool:
     if name == ".env":
         return True
     return name.startswith(".env.") and name != ".env.example"
+
+
+def _display_path(path: Path) -> str:
+    return path.as_posix()
 
 
 def _private_path_hits(path: Path, absolute_path: Path, text: str) -> bool:

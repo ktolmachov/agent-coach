@@ -72,7 +72,7 @@ def test_live_eval_public_evidence_schema_is_validated() -> None:
     payload["contains_scripted_responses"] = True
     assert (
         "scripted responses are not live evidence: "
-        "docs\\evidence\\live-eval-public.json"
+        "docs/evidence/live-eval-public.json"
     ) in gate._validate_evidence_payload(
         Path("docs/evidence/live-eval-public.json"),
         payload,
@@ -143,7 +143,7 @@ def test_public_release_gate_rejects_oversized_live_eval_artifact(
     failures = gate._check_evidence_artifacts(tmp_path, [path])
 
     assert failures == [
-        "malformed release evidence docs\\evidence\\live-eval-public.json: "
+        "malformed release evidence docs/evidence/live-eval-public.json: "
         "live eval public evidence exceeds 64000 bytes"
     ]
 
@@ -176,10 +176,10 @@ def test_publishable_scan_rejects_generic_secrets_and_private_paths(tmp_path) ->
     failures = gate._check_publishable_text(tmp_path, paths)
 
     assert any(
-        "private local path marker in docs\\probe.md" in item for item in failures
+        "private local path marker in docs/probe.md" in item for item in failures
     )
-    assert any("secret-like token in tests\\probe.py" in item for item in failures)
-    assert any("secret-like token in docs\\secret.txt" in item for item in failures)
+    assert any("secret-like token in tests/probe.py" in item for item in failures)
+    assert any("secret-like token in docs/secret.txt" in item for item in failures)
 
 
 def test_private_path_allowlist_does_not_exclude_whole_test_files(tmp_path) -> None:
@@ -194,7 +194,7 @@ def test_private_path_allowlist_does_not_exclude_whole_test_files(tmp_path) -> N
 
     failures = gate._check_publishable_text(tmp_path, [path])
 
-    assert failures == ["private local path marker in tests\\test_core.py"]
+    assert failures == ["private local path marker in tests/test_core.py"]
 
 
 def test_markdown_scan_rejects_custom_hometutor_checkout_paths(tmp_path) -> None:
@@ -205,7 +205,7 @@ def test_markdown_scan_rejects_custom_hometutor_checkout_paths(tmp_path) -> None
 
     failures = gate._check_publishable_text(tmp_path, [path])
 
-    assert failures == ["private local path marker in docs\\custom.md"]
+    assert failures == ["private local path marker in docs/custom.md"]
 
 
 def test_secret_allowlist_requires_exact_fixture_matches(tmp_path) -> None:
@@ -217,7 +217,7 @@ def test_secret_allowlist_requires_exact_fixture_matches(tmp_path) -> None:
 
     failures = gate._check_publishable_text(tmp_path, [path])
 
-    assert failures == ["secret-like token in tests\\test_mock_adapters.py"]
+    assert failures == ["secret-like token in tests/test_mock_adapters.py"]
 
 
 def test_release_surface_scans_unknown_suffix_and_suffixless_files(tmp_path) -> None:
@@ -238,7 +238,7 @@ def test_release_surface_scans_unknown_suffix_and_suffixless_files(tmp_path) -> 
 
     assert failures == [
         "secret-like token in NOTICE",
-        "private local path marker in scripts\\leak.ps1",
+        "private local path marker in scripts/leak.ps1",
     ]
 
 
@@ -258,8 +258,8 @@ def test_sensitive_container_files_are_blocked() -> None:
         "sensitive credential container is not release-safe: .env",
         "sensitive credential container is not release-safe: .env.local",
         "sensitive credential container is not release-safe: leaked.pem",
-        "sensitive credential container is not release-safe: certs\\private.key",
-        "sensitive credential container is not release-safe: certs\\bundle.p12",
+        "sensitive credential container is not release-safe: certs/private.key",
+        "sensitive credential container is not release-safe: certs/bundle.p12",
     ]
 
 
@@ -277,7 +277,7 @@ def test_secret_scan_rejects_pem_github_and_openai_tokens(tmp_path) -> None:
 
     failures = gate._check_publishable_text(tmp_path, [path])
 
-    assert failures == ["secret-like token in docs\\secrets.md"]
+    assert failures == ["secret-like token in docs/secrets.md"]
 
 
 def test_secret_scan_rejects_encrypted_and_pgp_private_keys_in_markdown(
@@ -294,7 +294,7 @@ def test_secret_scan_rejects_encrypted_and_pgp_private_keys_in_markdown(
 
     failures = gate._check_publishable_text(tmp_path, [path])
 
-    assert failures == ["secret-like token in docs\\probe.md"]
+    assert failures == ["secret-like token in docs/probe.md"]
 
 
 def test_production_claims_are_rejected_in_all_markdown(tmp_path) -> None:
@@ -312,7 +312,7 @@ def test_production_claims_are_rejected_in_all_markdown(tmp_path) -> None:
     failures = gate._check_readme_claims(tmp_path, paths)
 
     assert failures == [
-        "production readiness claim in docs\\claims.md: production-ready"
+        "production readiness claim in docs/claims.md: production-ready"
     ]
 
 
@@ -345,11 +345,11 @@ def test_release_evidence_rejects_dirty_or_stale_payload() -> None:
 
     assert (
         "release evidence commit does not match HEAD: "
-        "docs\\evidence\\diploma_demo.json"
+        "docs/evidence/diploma_demo.json"
     ) in failures
     assert (
         "release evidence was generated from a dirty worktree: "
-        "docs\\evidence\\diploma_demo.json"
+        "docs/evidence/diploma_demo.json"
     ) in failures
 
 
