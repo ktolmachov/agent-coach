@@ -467,3 +467,73 @@ Rollback:
 Stop:
 
 - stop after the D7 promotion report. Do not start any production migration.
+
+## D8 - Real Local Vector Memory and Retrieval
+
+Status: complete.
+
+Inputs:
+
+- implemented D1-D7 artifacts; D7 remains HOLD pending independent
+  promotion review, so D8 does not treat D7 as accepted;
+- frozen public `rag.search` schema;
+- framework-independent Agent Core ports.
+
+Write-set:
+
+- retrieval contracts and ports outside Core;
+- packaged synthetic diploma knowledge base;
+- deterministic hashed embedder and in-memory cosine store;
+- `rag.search` tool adapter and local-vector composition;
+- focused retrieval tests and adapter-boundary documentation.
+
+Implemented artifacts:
+
+- `src/agent_coach/retrieval/`;
+- `src/agent_coach/data/diploma_knowledge_base.json`;
+- `tests/test_retrieval.py`;
+- `docs/retrieval.md`;
+- `docs/adr/0002-diploma-live-adapter-boundary.md`.
+
+Independent promotion review:
+
+- verdict `PROMOTE D8` on the current working tree;
+- private path, email and HomeTutor path in `provenance.source` fail closed;
+- declared homonym negatives return empty retrieval;
+- caller `threshold=1.0` returns no weaker hits;
+- a failed NaN build leaves store size and both fingerprints unchanged;
+- `chunk_set_fingerprint` and `index_fingerprint` remain distinct identities;
+- residual hashed-lexical ambiguity is documented as a D8 limitation, not as
+  neural semantic retrieval.
+
+Non-goals:
+
+- no Core rewrite;
+- no public API or OpenAPI change;
+- no provider SDK or live profile;
+- no persisted index, production vector database or HomeTutor data.
+
+Promotion thresholds:
+
+- retrieval unit and contract tests pass;
+- declared query set top-1 is 100%;
+- security assertions pass;
+- deterministic repeat is 100%;
+- network calls, model downloads and filesystem writes stay at 0;
+- default mock profile does not regress.
+
+Checks:
+
+- targeted retrieval tests;
+- one mock-profile regression;
+- Ruff and compileall on the touched surface;
+- import-boundary scan of retrieval and core modules.
+
+Rollback:
+
+- remove the retrieval package, packaged corpus, retrieval tests and D8 docs
+  or revert the D8 commit; keep D1-D7 intact.
+
+Stop:
+
+- stop after the D8 promotion report. Do not start D9.

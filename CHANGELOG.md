@@ -24,3 +24,19 @@
   idempotency conflicts.
 - Public D7 review kit, release checklist, public release gate and deterministic
   diploma demonstration evidence script.
+- Offline local-vector retrieval profile with a hashed embedder, in-memory
+  cosine store and packaged synthetic diploma knowledge base.
+
+### Fixed
+
+- D8 retrieval now uses an adaptive relevance gate, fail-closed chunk
+  provenance and source labels, Bearer credential rejection, and a vector
+  index fingerprint that includes embedder width.
+- Local-vector search applies the caller threshold to every relevance branch,
+  compares provenance mappings exactly, rebuilds the in-memory index
+  atomically, and names the knowledge-base chunk-set fingerprint separately
+  from the vector index fingerprint.
+- Diploma knowledge-base provenance now rejects private paths and identifiers,
+  and the lexical gate drops queries with unmatched distinctive tokens below
+  the semantic-only bound.
+- Independent review promoted D8 on the current working tree. D7 remains HOLD.

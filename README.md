@@ -25,9 +25,11 @@ Implemented so far:
 - localhost-only FastAPI Mock Agent API with OpenAPI and Swagger UI.
 - diploma review kit, release checklist, public release gate and deterministic
   demo evidence script.
+- optional in-process local-vector retrieval profile for `rag.search`.
 
 The Mock API is a deterministic local review surface. It has no production
-auth, no production data and no durable production state.
+auth, no production data and no durable production state. Local-vector
+retrieval is an explicit offline adapter, not the default API profile.
 
 ## Install
 
@@ -65,6 +67,13 @@ Run one deterministic offline mock scenario from Python:
 python -c "from agent_coach.mock import build_mock_composition; c = build_mock_composition('grounded_success'); r = c.runner.run(c.request); print(r.answer_status, r.stop_reason.value)"
 ```
 
+Build the in-memory local vector index and run one question through
+`rag.search` without a provider key:
+
+```bash
+python -c "from agent_coach.retrieval import build_local_vector_composition; c = build_local_vector_composition('How does photosynthesis store energy in glucose using chlorophyll?'); r = c.runner.run(c.request); print(r.answer_status, r.sources[0]['file_name'])"
+```
+
 Or run the diploma demonstration script and emit JSON review evidence:
 
 ```bash
@@ -95,6 +104,8 @@ private source checkout.
 - [API status](docs/api.md)
 - [Core boundary](docs/core.md)
 - [Mock adapters](docs/mock_adapters.md)
+- [Local vector memory](docs/retrieval.md)
+- [Adapter boundary ADR](docs/adr/0002-diploma-live-adapter-boundary.md)
 - [Demo status](docs/demo.md)
 - [Diploma review kit](docs/review_kit.md)
 - [Release checklist](docs/release_checklist.md)

@@ -1,0 +1,154 @@
+{
+  "schema_version": "agent-coach-diploma-kb/1.0.0",
+  "corpus_version": "1.0.0",
+  "provenance": {
+    "classification": "synthetic_public_review_corpus",
+    "source": "D8 local vector memory slice",
+    "contains_production_data": false,
+    "contains_credentials": false,
+    "contains_learner_data": false,
+    "contains_hometutor_runtime_dependency": false
+  },
+  "chunks": [
+    {
+      "document_id": "doc-photosynthesis",
+      "chunk_id": "chunk-photosynthesis-glucose",
+      "title": "Photosynthesis basics",
+      "source": "photosynthesis-basics.md",
+      "text": "Photosynthesis converts light energy into chemical energy stored in glucose. Chlorophyll in thylakoid membranes captures photons so plants can build sugar. Plants make food from sunlight through this process. Фотосинтез и хлорофилл запасают энергию в глюкозе. Так работает фотосинтез: хлорофилл ловит свет.",
+      "version": "1.0.0"
+    },
+    {
+      "document_id": "doc-spaced-repetition",
+      "chunk_id": "chunk-spaced-repetition-forgetting",
+      "title": "Spaced repetition",
+      "source": "spaced-repetition.md",
+      "text": "Spaced repetition schedules reviews along the forgetting curve. A Leitner interval schedule lengthens gaps after successful recall so memory decays more slowly.",
+      "version": "1.0.0"
+    },
+    {
+      "document_id": "doc-retrieval-practice",
+      "chunk_id": "chunk-retrieval-practice-testing",
+      "title": "Retrieval practice",
+      "source": "retrieval-practice.md",
+      "text": "Retrieval practice, also called the testing effect, strengthens memory by asking learners to perform free recall of facts instead of rereading notes.",
+      "version": "1.0.0"
+    },
+    {
+      "document_id": "doc-active-recall",
+      "chunk_id": "chunk-active-recall-flashcards",
+      "title": "Active recall flashcards",
+      "source": "active-recall-flashcards.md",
+      "text": "Active recall flashcards force a learner to produce an answer from the card front, including cloze deletion prompts, before the back is revealed.",
+      "version": "1.0.0"
+    },
+    {
+      "document_id": "doc-bloom-taxonomy",
+      "chunk_id": "chunk-bloom-taxonomy-levels",
+      "title": "Bloom taxonomy",
+      "source": "bloom-taxonomy.md",
+      "text": "Bloom taxonomy orders learning objectives from remember and understand up through analyze, evaluate, and create. These taxonomy levels describe cognitive demand.",
+      "version": "1.0.0"
+    },
+    {
+      "document_id": "doc-cognitive-load",
+      "chunk_id": "chunk-cognitive-load-working-memory",
+      "title": "Cognitive load",
+      "source": "cognitive-load.md",
+      "text": "Working memory has limited slots, so extraneous cognitive load should be reduced during explanations. Germane load supports schema building.",
+      "version": "1.0.0"
+    },
+    {
+      "document_id": "doc-interleaving",
+      "chunk_id": "chunk-interleaving-mixed-practice",
+      "title": "Interleaving practice",
+      "source": "interleaving-practice.md",
+      "text": "Interleaving mixes different problem types in one practice session instead of blocked practice of a single type. A mixed problem set improves later discrimination.",
+      "version": "1.0.0"
+    },
+    {
+      "document_id": "doc-elaborative-interrogation",
+      "chunk_id": "chunk-elaborative-interrogation-why",
+      "title": "Elaborative interrogation",
+      "source": "elaborative-interrogation.md",
+      "text": "Elaborative interrogation asks why a fact is true so learners form a prior knowledge link. Why-questioning connects new ideas to what the learner already knows.",
+      "version": "1.0.0"
+    }
+  ],
+  "declared_queries": [
+    {
+      "id": "q1-photosynthesis",
+      "query": "How does photosynthesis store energy in glucose using chlorophyll?",
+      "expected_chunk_id": "chunk-photosynthesis-glucose"
+    },
+    {
+      "id": "q2-spaced-repetition",
+      "query": "What is spaced repetition along the forgetting curve and Leitner intervals?",
+      "expected_chunk_id": "chunk-spaced-repetition-forgetting"
+    },
+    {
+      "id": "q3-retrieval-practice",
+      "query": "Why does retrieval practice or the testing effect help free recall?",
+      "expected_chunk_id": "chunk-retrieval-practice-testing"
+    },
+    {
+      "id": "q4-active-recall",
+      "query": "How do active recall flashcards and cloze deletion prompts work?",
+      "expected_chunk_id": "chunk-active-recall-flashcards"
+    },
+    {
+      "id": "q5-bloom-taxonomy",
+      "query": "What taxonomy levels does Bloom taxonomy use from remember to create?",
+      "expected_chunk_id": "chunk-bloom-taxonomy-levels"
+    },
+    {
+      "id": "q6-cognitive-load",
+      "query": "How do working memory slots and extraneous cognitive load affect explanations?",
+      "expected_chunk_id": "chunk-cognitive-load-working-memory"
+    },
+    {
+      "id": "q7-interleaving",
+      "query": "Why mix problem types with interleaving instead of blocked practice?",
+      "expected_chunk_id": "chunk-interleaving-mixed-practice"
+    },
+    {
+      "id": "q8-elaborative-interrogation",
+      "query": "What is elaborative interrogation and why-questioning for prior knowledge?",
+      "expected_chunk_id": "chunk-elaborative-interrogation-why"
+    }
+  ],
+  "declared_paraphrase_queries": [
+    {
+      "id": "p1-photosynthesis-explain",
+      "query": "Explain photosynthesis",
+      "expected_chunk_id": "chunk-photosynthesis-glucose"
+    },
+    {
+      "id": "p2-interleaving",
+      "query": "What is interleaving?",
+      "expected_chunk_id": "chunk-interleaving-mixed-practice"
+    },
+    {
+      "id": "p3-flashcards",
+      "query": "How can flashcards help me study?",
+      "expected_chunk_id": "chunk-active-recall-flashcards"
+    },
+    {
+      "id": "p4-plants-sunlight",
+      "query": "How do plants make food from sunlight?",
+      "expected_chunk_id": "chunk-photosynthesis-glucose"
+    }
+  ],
+  "declared_negative_queries": [
+    "stock market bond yield inflation portfolio",
+    "olympic swimming world record medal",
+    "python asyncio event loop sockets",
+    "sourdough starter hydration bakers percentage oven spring",
+    "card front back printing design",
+    "confidence interval statistics regression",
+    "Plants vs Zombies video game strategy",
+    "create database table SQL syntax",
+    "How does a recall election work for an active candidate?",
+    "What is working memory in a computer with RAM?"
+  ]
+}

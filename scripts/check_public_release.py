@@ -193,6 +193,12 @@ ALLOWED_PRIVATE_PATH_FRAGMENTS = {
             "data",
             "agent_contract_bundle.json",
         ),
+        _repo_relative_code_fragment(
+            "src",
+            "agent_coach",
+            "data",
+            "diploma_knowledge_base.json",
+        ),
     },
 }
 BLOCKED_RELEASE_ARTIFACT_SUFFIXES = (

@@ -26,3 +26,4 @@ install, import, test or CI time.
 - D5: local Mock Agent API.
 - D6: parity and drift checks.
 - D7: diploma review kit and release evidence.
+- D8: local vector memory and retrieval.
