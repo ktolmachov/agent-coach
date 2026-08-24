@@ -387,7 +387,7 @@ Stop:
 
 ## D7 - Diploma Review Kit and Release
 
-Status: HOLD pending independent promotion review.
+Status: HOLD pending independent clean fresh-clone promotion review.
 
 Inputs:
 
@@ -432,7 +432,9 @@ HOLD remediation status:
   credentials, PEM private keys, GitHub/OpenAI token forms, production-readiness
   claims outside README, missing concrete private security fallback, sensitive
   credential containers and stale/dirty release evidence;
-- promotion remains pending an independent D7 review on a clean commit.
+- the clean release candidate is `829df29e58f6dd48fb09ee1400dec3c4115ad6b9`;
+  final D7 promotion remains coupled to the independent clean fresh-clone
+  evidence still required by D11.
 
 Non-goals:
 
@@ -748,8 +750,9 @@ Stop:
 
 ## D11 - Eval Gate, SOP, Review Kit and Clean Release Evidence
 
-Status: HOLD pending opt-in live provider evidence and clean fresh-clone release
-evidence.
+Status: HOLD pending valid clean fresh-clone release evidence and a successful
+final promotion-gate rerun. Opt-in live-provider evidence is complete for the
+clean release candidate `829df29e58f6dd48fb09ee1400dec3c4115ad6b9`.
 
 Inputs:
 
@@ -806,6 +809,14 @@ D11 micro-slice evidence:
   final artifacts;
 - `scripts/run_live_eval.py --scripted` validates the live eval runner offline
   without treating scripted Responses output as live evidence;
+- the tracked live-provider artifact on release candidate
+  `829df29e58f6dd48fb09ee1400dec3c4115ad6b9` produced five registered cases,
+  task success `1.0` and external wrapper artifact SHA-256
+  `4681fcb6178079be7f362dc648657e0ae885a886ddec0a1f10d1f55762c05556`;
+- the promotion gate accepted that live evidence and kept offline
+  `gate_status: PASS`, but correctly returned `promotion_status: HOLD` with
+  blocker `clean_release_evidence_invalid` because the external clean-release
+  evidence file had not yet been created;
 - offline `gate_status` is separate from `promotion_status`;
 - `promotion_status` remains fail-closed until Git HEAD is available, live
   evidence, clean worktree state and clean fresh-clone release evidence are all
