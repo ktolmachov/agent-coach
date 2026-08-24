@@ -134,6 +134,33 @@ class NormalizedResponse:
     total_tokens: int = 0
 
 
+@dataclass(frozen=True)
+class PlannerToolRequirement:
+    """Trusted per-run requirement for one provider-native tool call."""
+
+    name: str
+    arguments: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        name = self.name.strip()
+        if not name:
+            raise ValueError("required tool name must not be empty")
+        try:
+            encoded = json.dumps(
+                self.arguments,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            normalized = json.loads(encoded)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("required tool arguments must be JSON-compatible") from exc
+        if not isinstance(normalized, dict):
+            raise ValueError("required tool arguments must be an object")
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "arguments", normalized)
+
+
 @dataclass
 class ReplayValidationBudget:
     """Shared replay walker limits for one provider response output."""
@@ -189,7 +216,7 @@ class ProviderRequest:
     instructions: str
     input_items: tuple[dict[str, object], ...]
     tools: tuple[dict[str, object], ...] | None = None
-    tool_choice: str | None = None
+    tool_choice: str | Mapping[str, str] | None = None
     parallel_tool_calls: bool | None = None
     max_output_tokens: int = 400
     previous_response_id: str | None = None
@@ -208,7 +235,10 @@ class ProviderRequest:
             kwargs["include"] = list(self.include)
         if self.tools is not None:
             kwargs["tools"] = [dict(tool) for tool in self.tools]
-            kwargs["tool_choice"] = self.tool_choice or PROVIDER_TOOL_CHOICE_AUTO
+            choice = self.tool_choice or PROVIDER_TOOL_CHOICE_AUTO
+            kwargs["tool_choice"] = (
+                dict(choice) if isinstance(choice, Mapping) else choice
+            )
             kwargs["parallel_tool_calls"] = False
         if self.previous_response_id and self.store:
             kwargs["previous_response_id"] = self.previous_response_id
@@ -278,6 +308,7 @@ class OpenAIResponsesPlanner:
         client: ResponsesClientPort,
         *,
         router: ModelRouter | None = None,
+        tool_requirement: PlannerToolRequirement | None = None,
     ) -> None:
         if config.cost_cap_usd > 0:
             raise LiveConfigurationError(
@@ -287,6 +318,7 @@ class OpenAIResponsesPlanner:
         self._config = config
         self._client = client
         self._router = router if router is not None else ModelRouter(config)
+        self._tool_requirement = tool_requirement
         self._pending_history: tuple[dict[str, object], ...] = ()
         self._pending_call_id: str | None = None
         self._pending_output: str | None = None
@@ -323,10 +355,13 @@ class OpenAIResponsesPlanner:
         *,
         budget: str,
     ) -> PlannerCallResult:
+        instructions, tool_choice = _planner_policy(
+            tools, requirement=self._tool_requirement
+        )
         request = ProviderRequest(
             model_id=routed.model_id,
             model_role=PLANNER_ROLE,
-            instructions=PLANNER_INSTRUCTIONS,
+            instructions=instructions,
             input_items=_planner_input(
                 question,
                 tools,
@@ -336,7 +371,7 @@ class OpenAIResponsesPlanner:
                 pending_output=self._pending_output,
             ),
             tools=tuple(tool_specs_to_openai_tools(tools)),
-            tool_choice=PROVIDER_TOOL_CHOICE_AUTO,
+            tool_choice=tool_choice,
             parallel_tool_calls=False,
             max_output_tokens=self._config.max_output_tokens,
         )
@@ -375,6 +410,11 @@ class OpenAIResponsesPlanner:
                 call = response.function_calls[0]
                 call_id = _require_call_id(call.call_id)
                 args = _parse_tool_args(call.arguments_json)
+                _validate_required_tool_call(
+                    call.name,
+                    args,
+                    requirement=self._tool_requirement,
+                )
             except ProviderAdapterError as exc:
                 raise _annotated_provider_error(
                     exc,
@@ -397,6 +437,17 @@ class OpenAIResponsesPlanner:
                 ),
                 token_usage=usage,
                 routing=(_routing_from(routed, provider_call_id=call_id),),
+            )
+        if self._tool_requirement is not None:
+            exc = ProviderAdapterError(
+                "required_tool_missing",
+                "required_tool_missing: provider did not call the required tool",
+            )
+            raise _annotated_provider_error(
+                exc,
+                routed,
+                response=response,
+                phase=AgentPhase.KNOWLEDGE_RETRIEVAL,
             )
         answer = (response.output_text or "").strip()
         fallback = False
@@ -1019,6 +1070,64 @@ def _planner_input(
         }
     )
     return tuple(items)
+
+
+def _planner_policy(
+    tools: Sequence[ToolSpec],
+    *,
+    requirement: PlannerToolRequirement | None,
+) -> tuple[str, str | dict[str, str]]:
+    if requirement is None:
+        return PLANNER_INSTRUCTIONS, PROVIDER_TOOL_CHOICE_AUTO
+    if requirement.name not in {tool.name for tool in tools}:
+        raise ProviderAdapterError(
+            "invalid_native_call",
+            "invalid_native_call: required tool is not advertised",
+        )
+    arguments_json = json.dumps(
+        requirement.arguments,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    instructions = (
+        f"{PLANNER_INSTRUCTIONS} For this run, call {requirement.name}. "
+        f"Use exactly these JSON arguments: {arguments_json}. "
+        "Do not answer before making the required tool call."
+    )
+    return instructions, {"type": "function", "name": requirement.name}
+
+
+def _validate_required_tool_call(
+    tool_name: str,
+    arguments: Mapping[str, object],
+    *,
+    requirement: PlannerToolRequirement | None,
+) -> None:
+    if requirement is None:
+        return
+    if tool_name != requirement.name:
+        raise ProviderAdapterError(
+            "invalid_native_call",
+            "invalid_native_call: provider called a different tool than required",
+        )
+    actual_json = json.dumps(
+        arguments,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    required_json = json.dumps(
+        requirement.arguments,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    if actual_json != required_json:
+        raise ProviderAdapterError(
+            "invalid_native_call",
+            "invalid_native_call: provider changed required tool arguments",
+        )
 
 
 def _synthesizer_input(

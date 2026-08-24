@@ -32,6 +32,7 @@ from agent_coach.provider.model_router import PLANNER_ROLE, SYNTHESIZER_ROLE
 from agent_coach.provider.openai_responses import (
     NormalizedFunctionCall,
     NormalizedResponse,
+    PlannerToolRequirement,
     ScriptedResponsesClient,
 )
 
@@ -321,6 +322,10 @@ def _run_case(
             config=config,
             client=client,
             run_id=f"live-eval-{case.id}",
+            tool_requirement=PlannerToolRequirement(
+                name="rag.search",
+                arguments={"query": case.search_query, "top_k": 2},
+            ),
         )
         result = composition.runner.run(composition.request)
     except (LiveConfigurationError, ProviderAdapterError) as exc:

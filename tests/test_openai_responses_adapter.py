@@ -27,6 +27,7 @@ from agent_coach.provider.openai_responses import (
     NormalizedResponse,
     OpenAIResponsesPlanner,
     OpenAISdkResponsesClient,
+    PlannerToolRequirement,
     ProviderRequest,
     ScriptedResponsesClient,
     build_official_responses_client,
@@ -204,6 +205,89 @@ def test_tool_schemas_are_sent_in_provider_function_shape() -> None:
     assert result.decision.tool_name == "rag.search"
     assert result.decision.tool_args == {"query": "chlorophyll"}
     assert result.routing[0].provider_call_id == "call_1"
+
+
+def test_required_tool_policy_forces_registered_function_and_arguments() -> None:
+    required_args = {
+        "query": "photosynthesis energy glucose chlorophyll",
+        "top_k": 2,
+    }
+    client = ScriptedResponsesClient(
+        [
+            _tool_call("rag.search", required_args),
+            _text("Photosynthesis stores light energy in glucose [1]."),
+        ]
+    )
+    planner = OpenAIResponsesPlanner(
+        _config(),
+        client,
+        tool_requirement=PlannerToolRequirement(
+            name="rag.search",
+            arguments=required_args,
+        ),
+    )
+
+    first = planner.decide(
+        [{"role": "user", "content": "How does photosynthesis store energy?"}],
+        steps=[],
+        tools=(_search_tool(), _profile_tool()),
+    )
+
+    request = client.calls[0]
+    assert request.tool_choice == {"type": "function", "name": "rag.search"}
+    assert request.as_sdk_kwargs()["tool_choice"] == {
+        "type": "function",
+        "name": "rag.search",
+    }
+    assert json.dumps(required_args, sort_keys=True, separators=(",", ":")) in (
+        request.instructions
+    )
+    assert first.decision.tool_name == "rag.search"
+    assert first.decision.tool_args == required_args
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        _text("I can answer without retrieval."),
+        _tool_call(
+            "rag.search",
+            {"query": "photosynthesis", "top_k": 2},
+        ),
+        _tool_call(
+            "rag.search",
+            {
+                "query": "photosynthesis energy glucose chlorophyll",
+                "top_k": True,
+            },
+        ),
+        _tool_call(
+            "learner.get_profile",
+            {},
+        ),
+    ],
+)
+def test_required_tool_policy_rejects_missing_or_changed_call(
+    response: NormalizedResponse,
+) -> None:
+    planner = OpenAIResponsesPlanner(
+        _config(),
+        ScriptedResponsesClient([response]),
+        tool_requirement=PlannerToolRequirement(
+            name="rag.search",
+            arguments={
+                "query": "photosynthesis energy glucose chlorophyll",
+                "top_k": 2,
+            },
+        ),
+    )
+
+    with pytest.raises(ProviderAdapterError):
+        planner.decide(
+            [{"role": "user", "content": "How does photosynthesis store energy?"}],
+            steps=[],
+            tools=(_search_tool(), _profile_tool()),
+        )
 
 
 def test_native_tool_call_and_result_share_one_call_id() -> None:

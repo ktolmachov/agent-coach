@@ -22,6 +22,7 @@ from agent_coach.provider.errors import (
 )
 from agent_coach.provider.openai_responses import (
     OpenAIResponsesPlanner,
+    PlannerToolRequirement,
     ResponsesClientPort,
     build_official_responses_client,
 )
@@ -123,6 +124,7 @@ def build_live_composition(
     corpus_path: Path | None = None,
     contract_bundle_path: Path | None = None,
     run_id: str = "live-provider-demo",
+    tool_requirement: PlannerToolRequirement | None = None,
 ) -> LiveComposition:
     """Wire AgentRunner to the optional live-provider profile.
 
@@ -153,7 +155,11 @@ def build_live_composition(
         corpus_path=corpus_path,
     )
     tools = advertised_live_tools(contract_bundle_path=contract_bundle_path)
-    planner = OpenAIResponsesPlanner(settings, resolved_client)
+    planner = OpenAIResponsesPlanner(
+        settings,
+        resolved_client,
+        tool_requirement=tool_requirement,
+    )
     runner = AgentRunner(
         planner=planner,
         tools=tools,

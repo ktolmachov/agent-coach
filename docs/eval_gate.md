@@ -106,6 +106,12 @@ and cognitive load. Each case declares its question, expected and allowed
 tools, forbidden tools, expected grounded status, allowed source labels,
 citation requirement, security assertions and success rule.
 
+Because all five cases explicitly require grounded retrieval, the live harness
+forces the provider-native `rag.search` function choice and supplies the exact
+pre-registered query arguments for each case. The adapter rejects a missing
+call, a different tool or changed arguments instead of silently substituting a
+local call. Answer synthesis still runs through the configured live provider.
+
 Offline runner validation uses a scripted Responses client and is explicitly
 not live evidence:
 

@@ -28,6 +28,35 @@ def test_scripted_live_eval_runner_validates_cases_without_live_wrapper(
     assert {result["answer_status"] for result in written["results"]} == {"grounded"}
 
 
+def test_live_eval_requires_registered_rag_query_for_every_case(
+    monkeypatch,
+) -> None:
+    original_build = run_live_eval.build_live_composition
+    requirements = []
+
+    def recording_build(*args, **kwargs):
+        requirements.append(kwargs.get("tool_requirement"))
+        return original_build(*args, **kwargs)
+
+    monkeypatch.setattr(run_live_eval, "build_live_composition", recording_build)
+
+    payload = run_live_eval.run_live_eval(scripted=True)
+
+    assert payload["task_success_rate"] == 1.0
+    assert len(requirements) == len(run_live_eval.LIVE_EVAL_CASES)
+    for case, requirement in zip(
+        run_live_eval.LIVE_EVAL_CASES,
+        requirements,
+        strict=True,
+    ):
+        assert requirement is not None
+        assert requirement.name == "rag.search"
+        assert requirement.arguments == {
+            "query": case.search_query,
+            "top_k": 2,
+        }
+
+
 def test_scripted_live_eval_cannot_emit_live_wrapper(tmp_path: Path, capsys) -> None:
     wrapper = tmp_path / "live-wrapper.json"
 
