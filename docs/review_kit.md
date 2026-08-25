@@ -246,6 +246,10 @@ public-release and offline-eval commands with `stdout_sha256`. Oversized,
 marker-only or string-only suite/evidence JSON is rejected. Live scores below
 80% block promotion without changing offline `gate_status`; promotion evidence
 args or `--require-promotion` make `promotion_status` drive the CLI exit code.
+The live score is forced-grounding evidence for provider wiring, grounded
+synthesis and citations. It is not autonomous planner tool-selection accuracy;
+that requires the separate autonomous D11 harness and later opt-in live
+artifact.
 
 After the reviewed commit has a valid external live wrapper and external
 clean-release evidence, run the full promotion gate:

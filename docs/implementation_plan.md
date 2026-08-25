@@ -819,8 +819,9 @@ D11 micro-slice evidence:
 - invalid or unknown tool executions, security assertion failures, hidden
   writes and grounded answers without citation must remain 0;
 - active live cost cap with unknown pricing fails closed;
-- generated Tool SOP is derived from current advertised `ToolSpec` values and
-  compared to the committed snapshot;
+- generated Tool SOP is derived from current advertised `ToolSpec` values plus
+  the package-owned negative usage registry, distinguishes declared, global and
+  effective result caps, and is compared to the committed snapshot;
 - strict `scripts/check_public_release.py --release` preserves normal
   development mode while failing closed on dirty tree state or missing D11
   final artifacts;
@@ -859,9 +860,10 @@ Promotion thresholds:
   registry;
 - offline golden gate 100% on non-retrieval-top1 golden cases;
 - retrieval top-1 at least 80%;
-- live task success at least 80% for promotion or explicit
+- forced-grounding live task success at least 80% for promotion or explicit
   `HOLD: live provider evidence unavailable`; a lower live score blocks
-  promotion without changing offline `gate_status`;
+  promotion without changing offline `gate_status`, but it is not confirmed
+  autonomous planner tool-selection accuracy;
 - Git HEAD/status evidence is available or promotion stays `HOLD`;
 - valid live evidence must bind to HEAD, declare live-provider opt-in, include
   registered evidence provenance, registered live cases and public

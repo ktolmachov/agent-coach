@@ -139,8 +139,12 @@ A positive cost cap fails closed because this demo does not know cloud unit
 prices and will not invent them. Reported `cost_status` stays `unknown`.
 
 Offline proof for D9 is the scripted Responses client in tests. A live network
-run is optional reviewer evidence and is not required to promote this slice.
-D11 may still hold if live provider evidence is missing.
+run is optional reviewer evidence and is not required to promote the D9 slice.
+D11 promotion is separate: forced-grounding live evidence may be required for
+the final D11 promotion gate, while the owner-selected D11 policy records
+autonomous planner live evidence as a documented limitation until a separate
+`tool_choice=auto` autonomous artifact exists. The forced D11 live suite must
+not be cited as confirmed autonomous planner accuracy.
 
 ## Limitations
 

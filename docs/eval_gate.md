@@ -41,8 +41,10 @@ metrics and limitations. If Git HEAD cannot be read, promotion is blocked with
 
 - offline golden pass rate: 100% on non-retrieval-top1 golden cases;
 - retrieval top-1 accuracy: at least 80%;
-- live agent task success: at least 80% for promotion when opt-in live evidence
-  is supplied; this does not affect offline `gate_status`;
+- forced-grounding live task success: at least 80% for promotion when opt-in
+  live evidence is supplied; this checks provider wiring, grounded synthesis
+  and citation behavior, not autonomous planner tool-selection accuracy, and
+  it does not affect offline `gate_status`;
 - invalid or unknown tool executions: 0;
 - security assertion failures: 0;
 - hidden writes: 0;
@@ -121,6 +123,9 @@ forces the provider-native `rag.search` function choice and supplies the exact
 pre-registered query arguments for each case. The adapter rejects a missing
 call, a different tool or changed arguments instead of silently substituting a
 local call. Answer synthesis still runs through the configured live provider.
+This suite is forced-grounding evidence only; confirmed autonomous planner
+accuracy requires the separate `tool_choice: auto` harness and later live
+artifact.
 
 Offline runner validation uses a scripted Responses client and is explicitly
 not live evidence:
@@ -156,6 +161,10 @@ example cannot be converted into live promotion evidence.
 ## Tool SOP
 
 The generated Tool SOP is in `docs/tool_sop.md` and is checked by
-`tests/test_eval_gate.py` against the current advertised `ToolSpec` values.
+`tests/test_eval_gate.py` against the current advertised `ToolSpec` values and
+the package-owned negative usage registry. Its limits column distinguishes
+declared per-tool `ToolSpec` limits, the global runtime safety projection cap
+and the effective result cap, which is the smaller value for tools such as
+`rag.search`.
 `python scripts/run_eval_gate.py --print-tool-sop` prints the generated SOP and
 returns non-zero if the committed snapshot has drifted.

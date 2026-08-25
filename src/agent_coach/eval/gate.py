@@ -68,6 +68,16 @@ DEFAULT_EVAL_RESOURCE = "diploma_eval_cases.json"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PASS = "PASS"
 HOLD = "HOLD"
+GLOBAL_RESULT_PROJECTION_CAP_CHARS = 2000
+WHEN_NOT_TO_USE_BY_TOOL = {
+    "cards.get_due": "Do not use as a write or scheduling action.",
+    "catalog.list": "Do not use to browse private or external catalogs.",
+    "learner.get_profile": (
+        "Do not use to request private learner identifiers or credentials."
+    ),
+    "quiz.generate": "Do not use before grounded topic evidence is available.",
+    "rag.search": "Do not use for questions outside the packaged public corpus.",
+}
 EXPECTED_CASE_COUNT = 27
 MAX_SUITE_JSON_BYTES = 128_000
 MAX_EVIDENCE_JSON_BYTES = 64_000
@@ -264,11 +274,18 @@ def build_tool_sop_markdown() -> str:
     """Generate the advertised tool SOP from frozen ``ToolSpec`` declarations."""
 
     tools = _advertised_tool_specs()
+    missing_negative_guidance = sorted(
+        tool.name for tool in tools if tool.name not in WHEN_NOT_TO_USE_BY_TOOL
+    )
+    if missing_negative_guidance:
+        missing = ", ".join(missing_negative_guidance)
+        raise ValueError(f"missing Tool SOP negative guidance: {missing}")
     lines = [
         "# Tool SOP",
         "",
         "Generated from the frozen public `ToolSpec` declarations used by the "
-        "mock, local-vector and live-provider diploma profiles.",
+        "mock, local-vector and live-provider diploma profiles, plus the "
+        "package-owned negative usage registry.",
         "",
         "| Tool | Effect | When To Use | When Not To Use | Model Args | "
         "Trusted Context | Validation | Timeout/Retry | Expected Result | "
@@ -820,32 +837,36 @@ def _validation_summary(schema: Mapping[str, Any]) -> str:
 
 
 def _limits_summary(limits: Mapping[str, Any]) -> str:
+    effective_result_cap = _effective_result_cap(limits)
     if not limits:
         return (
-            "No per-tool limits declared in ToolSpec. Runner budgets still apply; "
+            "No per-tool limits declared in ToolSpec. Global runtime safety "
+            f"projection cap: max_result_chars={GLOBAL_RESULT_PROJECTION_CAP_CHARS}. "
+            f"Effective result cap: max_result_chars={effective_result_cap}. "
+            "Runner budgets still apply; "
             "retry policy is not declared in ToolSpec."
         )
     declared = "; ".join(
         f"{key}={value}" for key, value in sorted(limits.items())
     )
     return (
-        f"Declared ToolSpec limits: {declared}. Runner budgets still apply; "
+        f"Declared ToolSpec limits: {declared}. Global runtime safety "
+        f"projection cap: max_result_chars={GLOBAL_RESULT_PROJECTION_CAP_CHARS}. "
+        f"Effective result cap: max_result_chars={effective_result_cap}. "
+        "Runner budgets still apply; "
         "retry policy is not declared in ToolSpec."
     )
 
 
+def _effective_result_cap(limits: Mapping[str, Any]) -> int:
+    declared = limits.get("max_result_chars")
+    if isinstance(declared, bool) or not isinstance(declared, int):
+        return GLOBAL_RESULT_PROJECTION_CAP_CHARS
+    return min(declared, GLOBAL_RESULT_PROJECTION_CAP_CHARS)
+
+
 def _when_not_to_use(tool: ToolSpec) -> str:
-    if tool.name == "rag.search":
-        return "Do not use for questions outside the packaged public corpus."
-    if tool.name == "learner.get_profile":
-        return "Do not use to request private learner identifiers or credentials."
-    if tool.name == "quiz.generate":
-        return "Do not use before grounded topic evidence is available."
-    if tool.name == "cards.get_due":
-        return "Do not use as a write or scheduling action."
-    if tool.name == "catalog.list":
-        return "Do not use to browse private or external catalogs."
-    return "Do not use for write actions or undeclared side effects."
+    return WHEN_NOT_TO_USE_BY_TOOL[tool.name]
 
 
 def _expected_result(tool: ToolSpec) -> str:

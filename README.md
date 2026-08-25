@@ -167,6 +167,11 @@ The D11 live eval runner requires explicit CLI opt-in:
 python scripts/run_live_eval.py --allow-network --provider-opt-in --output ../agent-coach-live-eval-public.json
 ```
 
+That forced-grounding live suite checks provider wiring, grounded synthesis and
+citation behavior for pre-registered retrieval cases. It does not measure
+autonomous planner tool-selection accuracy; that requires the separate
+autonomous harness planned in D11 and live evidence collected after E1.
+
 Scripted validation of the runner is offline and is not live evidence:
 
 ```bash

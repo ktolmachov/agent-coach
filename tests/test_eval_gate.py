@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from scripts import run_eval_gate, run_live_eval
 
+from agent_coach.core import ToolSpec
 from agent_coach.eval import (
     build_tool_sop_markdown,
     gate,
@@ -792,11 +793,33 @@ def test_tool_sop_snapshot_matches_generated_markdown() -> None:
     assert "integer or null optional" in expected
     assert '{"max_result_chars":' not in expected
     assert "Declared ToolSpec limits:" in expected
+    assert "Global runtime safety projection cap: max_result_chars=2000" in expected
+    assert "Effective result cap: max_result_chars=2000" in expected
     assert "retry policy is not declared in ToolSpec" in expected
+    assert "package-owned negative usage registry" in expected
     assert (
         "Error categories and retry semantics are not declared in ToolSpec"
         in expected
     )
+
+
+def test_tool_sop_requires_negative_guidance_for_every_advertised_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        gate,
+        "_advertised_tool_specs",
+        lambda: (
+            ToolSpec(
+                name="new.read_tool",
+                description="Synthetic advertised tool.",
+                when_to_use="Use for focused test coverage.",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="missing Tool SOP negative guidance"):
+        build_tool_sop_markdown()
 
 
 def test_print_tool_sop_checks_snapshot_drift(
