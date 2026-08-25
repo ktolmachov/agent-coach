@@ -1,5 +1,43 @@
 # Scripts
 
+## Acceptance Commission Demo
+
+Run the complete deterministic commissioning sequence from the repository root:
+
+```bash
+python scripts/run_acceptance_demo.py --full-checks --serve --output ../agent-coach-acceptance-report.json
+```
+
+The script validates the wheel artifact, exported contracts, OpenAPI snapshot,
+architecture drift gate, public release surface, full public tests, Ruff,
+compileall and the D11 offline eval gate. It then demonstrates the mock,
+local-vector and scripted provider-contract profiles and performs a real HTTP
+smoke against the localhost-only Mock API. With `--serve`, Swagger UI remains
+available at `http://127.0.0.1:8008/docs` until Ctrl+C.
+
+The HTTP smoke also fails closed unless it can prove the complete agentic chain:
+the submitted question, the ordered tool selection, successful retrieval with
+a public source, and a grounded final answer that cites that source. These four
+links are printed for the commission and stored under `agentic_chain` in the
+optional JSON report; a static answer without tool/context evidence fails.
+It then submits three contrasting questions and requires three different tool
+routes: a grounded learning answer, an empty-cards abstention and a safe
+abstention for prompt-injection content. The `contrastive_routing` evidence
+proves that the demo does not accept one fixed route or hallucinate when safe
+grounding is unavailable.
+The same live localhost process also replays an idempotent request, checks that
+tool arguments match the advertised schemas, rejects harness identity fields,
+records stable per-scenario projection hashes and prints an
+`evidence_payload_sha256` digest. Finally, it sends invalid HTTP requests for
+idempotency conflict, schema validation, payload limit, unknown tool, forbidden
+identity args and unknown run; every case must return a bounded error
+envelope.
+
+The default path is offline. It never enables provider network access and
+scripted provider validation is not live evidence. Generated reports must be
+written outside the checkout. Add `--require-clean` when collecting evidence
+for an immutable reviewed commit.
+
 D2 adds the contract verification helper:
 
 ```bash

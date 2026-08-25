@@ -18,6 +18,39 @@ Expected result: the demo prints JSON evidence with
 `answer_status: "grounded"` and `success: true`. The optional live-provider
 profile is not this review path.
 
+## Acceptance Commission Run
+
+For a guided end-to-end presentation, install all public review tooling and run:
+
+```bash
+python -m pip install -e ".[dev,build]"
+python scripts/run_acceptance_demo.py --full-checks --serve --output ../agent-coach-acceptance-report.json
+```
+
+The script fails closed on the first unsuccessful check, emits a bounded
+PASS/FAIL summary, writes optional evidence only outside the checkout and then
+keeps the localhost Mock API available for Swagger review until Ctrl+C. It
+covers the built wheel, public gates, deterministic mock and local-vector
+profiles, scripted provider-contract validation and a real localhost HTTP run.
+The HTTP run prints and records the verified chain `question -> selected tools
+-> retrieved public context -> grounded cited answer`; any missing or
+inconsistent link fails the acceptance run rather than treating a static API
+response as agent evidence.
+The same API process also runs a contrast set: learning, due-card and unsafe
+retrieval questions must produce three distinct tool routes with one grounded
+answer and two safe abstentions. The external report records every question,
+route, source count and answer status under `contrastive_routing`.
+It then proves repeatability and boundary safety: the same idempotency key
+returns the same accepted run, the stable result projection is unchanged,
+selected tool arguments match advertised schemas and contain no harness
+identity fields, and the report stores per-scenario projection hashes plus a
+top-level `evidence_payload_sha256`. Negative localhost HTTP checks cover
+idempotency conflict, malformed schema, oversized payload, unknown tool,
+forbidden identity arguments and unknown run; each must fail closed through the
+public error envelope.
+It does not call a live provider, create release evidence, authorize production
+deployment or create a release tag.
+
 ## Architecture
 
 ```text
