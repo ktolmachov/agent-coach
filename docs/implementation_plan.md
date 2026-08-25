@@ -853,6 +853,10 @@ D11 micro-slice evidence:
   offline gate now reports retrieval-negative rejection, provider-contract
   fail-closed, security-containment and exact budget stop-reason denominators,
   and still reports zero real provider spend.
+- E1 adds a separate autonomous planner tool-selection harness and public
+  schema with `tool_choice: auto`, no forced `PlannerToolRequirement`, fixed
+  thresholds, offline scripted validation and non-promotion status reporting
+  under `DOCUMENTED_LIMITATION`.
 
 Non-goals:
 
@@ -875,6 +879,9 @@ Promotion thresholds:
   `HOLD: live provider evidence unavailable`; a lower live score blocks
   promotion without changing offline `gate_status`, but it is not confirmed
   autonomous planner tool-selection accuracy;
+- autonomous planner tool-selection evidence is separate from forced-grounding
+  live evidence; under `DOCUMENTED_LIMITATION` absent or failing autonomous
+  evidence is reported but does not block promotion;
 - Git HEAD/status evidence is available or promotion stays `HOLD`;
 - valid live evidence must bind to HEAD, declare live-provider opt-in, include
   registered evidence provenance, registered live cases and public

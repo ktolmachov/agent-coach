@@ -58,8 +58,14 @@ def test_d11_eval_gate_passes_offline_and_reports_promotion_hold() -> None:
     assert report["gate_status"] == "PASS"
     assert report["promotion_status"] == "HOLD"
     assert report["live_evidence"]["status"] == "unavailable"
+    assert report["autonomous_live_evidence"]["status"] == "unavailable"
+    assert report["autonomous_live_evidence"]["required_for_promotion"] is False
     assert report["clean_release_evidence"]["status"] == "unavailable"
     assert "live_evidence_unavailable" in report["promotion_blockers"]
+    assert not any(
+        blocker.startswith("autonomous_live_evidence_")
+        for blocker in report["promotion_blockers"]
+    )
     assert "clean_release_evidence_unavailable" in report["promotion_blockers"]
     assert report["metrics"]["offline_golden_pass_rate"] == 1.0
     assert report["metrics"]["retrieval_top1_accuracy"] >= 0.8
@@ -132,6 +138,58 @@ def test_live_evidence_is_schema_validated_and_thresholded(
     assert weak_report["promotion_status"] == "HOLD"
     assert weak_report["threshold_failures"] == []
     assert "live_evidence_below_threshold" in weak_report["promotion_blockers"]
+
+
+def test_autonomous_evidence_is_reported_without_promotion_blocking(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent_coach.eval.gate._git_output", _fake_clean_git)
+    monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", True))
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path)
+    invalid = tmp_path / "autonomous-invalid.json"
+    invalid.write_text("{}", encoding="utf-8")
+
+    invalid_report = run_eval_suite(autonomous_live_evidence_path=invalid)
+
+    assert invalid_report["gate_status"] == "PASS"
+    assert invalid_report["autonomous_live_evidence"]["status"] == "invalid"
+    assert invalid_report["autonomous_live_evidence"]["required_for_promotion"] is False
+    assert not any(
+        blocker.startswith("autonomous_live_evidence_")
+        for blocker in invalid_report["promotion_blockers"]
+    )
+
+    failed = tmp_path / "autonomous-failed.json"
+    payload = run_live_eval.run_autonomous_live_eval(scripted=True)
+    payload.update(
+        {
+            "mode": "live_provider",
+            "contains_scripted_responses": False,
+            "provider_profile_opt_in": True,
+            "execution_backend": "live_provider",
+            "evaluated_commit": "clean-head",
+            "clean_worktree": True,
+        }
+    )
+    payload["results"][0]["task_success"] = False
+    payload["metrics"] = {
+        **payload["metrics"],
+        "tool_name_accuracy": 0.0,
+    }
+    failed.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    failed_report = run_eval_suite(autonomous_live_evidence_path=failed)
+
+    assert failed_report["gate_status"] == "PASS"
+    assert failed_report["autonomous_live_evidence"]["status"] == "invalid"
+    assert not any(
+        blocker.startswith("autonomous_live_evidence_")
+        for blocker in failed_report["promotion_blockers"]
+    )
 
 
 def test_dirty_worktree_prevents_promotion_pass(

@@ -7,16 +7,21 @@ from pathlib import Path
 from scripts import run_live_eval
 
 from agent_coach.eval.live_evidence import (
+    AUTONOMOUS_LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
+    AUTONOMOUS_LIVE_EVAL_THRESHOLDS,
     LIVE_EVAL_CASE_REGISTRY,
+    LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
     LIVE_EXECUTION_BACKEND,
     UNEXPECTED_PUBLIC_FIELD_FAILURE,
     UNSAFE_PUBLIC_VALUE_FAILURE,
+    autonomous_live_eval_case_registry_hash,
     bounded_live_eval_failure,
     executable_case_contract,
     live_eval_case_registry_hash,
     live_eval_contract_hash,
     live_eval_corpus_hash,
     public_case_contract,
+    validate_autonomous_live_eval_public_payload,
     validate_current_live_eval_public_payload,
     validate_historical_live_eval_public_payload,
     validate_live_eval_public_payload,
@@ -88,6 +93,81 @@ def test_scripted_live_eval_cannot_emit_live_wrapper(tmp_path: Path, capsys) -> 
 
     assert "not live evidence" in capsys.readouterr().err
     assert not wrapper.exists()
+
+
+def test_scripted_autonomous_eval_uses_auto_tool_choice_and_separate_schema(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    original_build = run_live_eval.build_live_composition
+    requirements = []
+
+    def recording_build(*args, **kwargs):
+        requirements.append(kwargs.get("tool_requirement"))
+        return original_build(*args, **kwargs)
+
+    monkeypatch.setattr(run_live_eval, "build_live_composition", recording_build)
+    output = tmp_path / "scripted-autonomous.json"
+
+    assert (
+        run_live_eval.main(
+            ["--autonomous", "--scripted", "--output", str(output)]
+        )
+        == 0
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == json.loads(output.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == AUTONOMOUS_LIVE_EVAL_PUBLIC_SCHEMA_VERSION
+    assert payload["schema_version"] != LIVE_EVAL_PUBLIC_SCHEMA_VERSION
+    assert payload["contains_scripted_responses"] is True
+    assert payload["provider_profile_opt_in"] is False
+    assert requirements == [None] * len(
+        run_live_eval.AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY
+    )
+    assert payload["metrics"] == {
+        "tool_name_accuracy": 1.0,
+        "tool_name_case_count": 1,
+        "no_call_precision": 1.0,
+        "no_call_case_count": 2,
+        "valid_args_rate": 1.0,
+        "valid_args_case_count": 1,
+        "invalid_forbidden_executions": 0,
+    }
+    assert validate_autonomous_live_eval_public_payload(
+        payload,
+        allow_scripted=True,
+    ) == []
+    assert validate_current_live_eval_public_payload(payload) == [
+        "public live evidence has unexpected fields"
+    ]
+
+
+def test_autonomous_metrics_and_thresholds_fail_closed() -> None:
+    payload = run_live_eval.run_autonomous_live_eval(scripted=True)
+    assert payload["case_registry_hash"] == autonomous_live_eval_case_registry_hash()
+
+    drifted_metrics = dict(payload)
+    drifted_metrics["metrics"] = dict(payload["metrics"], no_call_precision=0.0)
+    assert "autonomous metrics do not match per-case results" in (
+        validate_autonomous_live_eval_public_payload(
+            drifted_metrics,
+            allow_scripted=True,
+        )
+    )
+
+    drifted_thresholds = dict(payload)
+    drifted_thresholds["thresholds"] = dict(
+        AUTONOMOUS_LIVE_EVAL_THRESHOLDS,
+        tool_name_accuracy=0.5,
+    )
+    assert "autonomous thresholds do not match the registry" in (
+        validate_autonomous_live_eval_public_payload(
+            drifted_thresholds,
+            allow_scripted=True,
+        )
+    )
 
 
 def test_live_eval_requires_explicit_network_and_provider_opt_in(capsys) -> None:

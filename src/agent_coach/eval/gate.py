@@ -34,7 +34,10 @@ from agent_coach.core.ports import Message
 from agent_coach.core.runner import AgentRunner
 from agent_coach.core.security import DefaultSecurityPolicy, trace_text
 from agent_coach.eval.live_evidence import (
+    AUTONOMOUS_LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
+    AUTONOMOUS_LIVE_POLICY,
     read_limited_live_eval_public_bytes,
+    validate_autonomous_live_eval_public_payload,
     validate_live_eval_public_payload,
 )
 from agent_coach.mock import advertised_mock_tools, build_mock_composition
@@ -222,6 +225,7 @@ def run_eval_suite(
     *,
     suite_path: Path | None = None,
     live_evidence_path: Path | None = None,
+    autonomous_live_evidence_path: Path | None = None,
     clean_release_evidence_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run deterministic offline D11 cases and return a public report."""
@@ -236,6 +240,10 @@ def run_eval_suite(
     git_available = bool(current_commit) and git_status_available
     live_evidence = _load_live_evidence(
         live_evidence_path,
+        current_commit=current_commit or None,
+    )
+    autonomous_live_evidence = _load_autonomous_live_evidence(
+        autonomous_live_evidence_path,
         current_commit=current_commit or None,
     )
     clean_release_evidence = _load_clean_release_evidence(
@@ -255,6 +263,7 @@ def run_eval_suite(
         gate_status=gate_status,
         worktree_dirty=worktree_dirty,
         live_evidence=live_evidence,
+        autonomous_live_evidence=autonomous_live_evidence,
         clean_release_evidence=clean_release_evidence,
         git_available=git_available,
         thresholds=thresholds,
@@ -277,10 +286,15 @@ def run_eval_suite(
         "results": results,
         "metrics": metrics,
         "live_evidence": live_evidence,
+        "autonomous_live_evidence": autonomous_live_evidence,
         "clean_release_evidence": clean_release_evidence,
         "limitations": [
             "offline eval gate uses synthetic public fixtures",
             "live provider evidence is opt-in and non-deterministic",
+            (
+                "autonomous planner tool-selection evidence is separate from "
+                "forced-grounding live evidence"
+            ),
             "final clean-clone release evidence is a separate D11 promotion step",
         ],
         "threshold_failures": threshold_failures,
@@ -1054,6 +1068,7 @@ def _promotion_blockers(
     gate_status: str,
     worktree_dirty: bool,
     live_evidence: Mapping[str, Any],
+    autonomous_live_evidence: Mapping[str, Any],
     clean_release_evidence: Mapping[str, Any],
     git_available: bool,
     thresholds: Mapping[str, Any],
@@ -1075,6 +1090,14 @@ def _promotion_blockers(
     if clean_release_evidence.get("status") != "available":
         blockers.append(
             f"clean_release_evidence_{clean_release_evidence.get('status')}"
+        )
+    if (
+        AUTONOMOUS_LIVE_POLICY == "BLOCKER"
+        and autonomous_live_evidence.get("status") != "available"
+    ):
+        blockers.append(
+            "autonomous_live_evidence_"
+            f"{autonomous_live_evidence.get('status')}"
         )
     return blockers
 
@@ -1285,6 +1308,62 @@ def _load_live_evidence(
         "evidence_artifacts": artifacts,
         "provenance": provenance,
         "evidence_schema_version": LIVE_EVIDENCE_SCHEMA_VERSION,
+    }
+
+
+def _load_autonomous_live_evidence(
+    path: Path | None,
+    *,
+    current_commit: str | None,
+) -> dict[str, Any]:
+    required = AUTONOMOUS_LIVE_POLICY == "BLOCKER"
+    if path is None:
+        return {
+            "status": "unavailable",
+            "required_for_promotion": required,
+            "policy": AUTONOMOUS_LIVE_POLICY,
+            "reason": "no autonomous live evidence file supplied",
+        }
+    try:
+        payload = json.loads(
+            _read_limited_text(path, max_bytes=MAX_EVIDENCE_JSON_BYTES)
+        )
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+        invalid = _invalid_evidence("autonomous_live", exc)
+        invalid["required_for_promotion"] = required
+        invalid["policy"] = AUTONOMOUS_LIVE_POLICY
+        return invalid
+    failures = validate_autonomous_live_eval_public_payload(payload)
+    if failures:
+        invalid = _invalid_evidence("autonomous_live", failures[0])
+        invalid["required_for_promotion"] = required
+        invalid["policy"] = AUTONOMOUS_LIVE_POLICY
+        return invalid
+    if current_commit is None:
+        invalid = _invalid_evidence("autonomous_live", "git HEAD is unavailable")
+        invalid["required_for_promotion"] = required
+        invalid["policy"] = AUTONOMOUS_LIVE_POLICY
+        return invalid
+    if (
+        isinstance(payload, Mapping)
+        and payload.get("evaluated_commit") != current_commit
+    ):
+        invalid = _invalid_evidence(
+            "autonomous_live",
+            "evaluated_commit does not match HEAD",
+        )
+        invalid["required_for_promotion"] = required
+        invalid["policy"] = AUTONOMOUS_LIVE_POLICY
+        return invalid
+    return {
+        "status": "available",
+        "required_for_promotion": required,
+        "policy": AUTONOMOUS_LIVE_POLICY,
+        "case_count": payload["case_count"],
+        "metrics": payload["metrics"],
+        "evaluated_commit": payload["evaluated_commit"],
+        "checked_at_utc": _utc_timestamp(payload.get("checked_at_utc")),
+        "evidence_schema_version": AUTONOMOUS_LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
     }
 
 

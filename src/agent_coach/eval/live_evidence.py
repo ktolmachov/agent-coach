@@ -15,6 +15,9 @@ from agent_coach.core.contracts import CONTRACT_SCHEMA_HASH
 from agent_coach.retrieval.corpus import load_diploma_knowledge_base
 
 LIVE_EVAL_PUBLIC_SCHEMA_VERSION = "agent-coach-live-eval-public/1.0.0"
+AUTONOMOUS_LIVE_EVAL_PUBLIC_SCHEMA_VERSION = (
+    "agent-coach-autonomous-live-eval-public/1.0.0"
+)
 LIVE_EVAL_PUBLIC_PROVENANCE = {
     "classification": "redacted_live_provider_eval_public",
     "contains_credentials": False,
@@ -22,12 +25,23 @@ LIVE_EVAL_PUBLIC_PROVENANCE = {
     "contains_hometutor_runtime_dependency": False,
     "contains_raw_provider_payloads": False,
 }
+AUTONOMOUS_LIVE_EVAL_PUBLIC_PROVENANCE = {
+    **LIVE_EVAL_PUBLIC_PROVENANCE,
+    "classification": "redacted_autonomous_live_provider_eval_public",
+}
+AUTONOMOUS_LIVE_POLICY = "DOCUMENTED_LIMITATION"
 HISTORICAL_LIVE_EVAL_CLASSIFICATION = "historical_example"
 HISTORICAL_LIVE_EVAL_PUBLIC_PROVENANCE = {
     **LIVE_EVAL_PUBLIC_PROVENANCE,
     "classification": HISTORICAL_LIVE_EVAL_CLASSIFICATION,
 }
 LIVE_EVAL_MIN_TASK_SUCCESS_RATE = 0.8
+AUTONOMOUS_LIVE_EVAL_THRESHOLDS = {
+    "tool_name_accuracy": 1.0,
+    "no_call_precision": 1.0,
+    "valid_args_rate": 1.0,
+    "invalid_forbidden_executions": 0,
+}
 MAX_LIVE_EVIDENCE_JSON_BYTES = 64_000
 MAX_PROVENANCE_FAILURE_CHARS = 240
 MAX_DYNAMIC_PUBLIC_TEXT_CHARS = 240
@@ -78,6 +92,30 @@ CURRENT_LIVE_EVAL_KEYS = frozenset(
         "model_roles",
         "limits",
         "pricing",
+        "cases",
+        "results",
+    }
+)
+AUTONOMOUS_LIVE_EVAL_KEYS = frozenset(
+    {
+        "schema_version",
+        "provenance",
+        "repository",
+        "profile",
+        "mode",
+        "contains_scripted_responses",
+        "provider_profile_opt_in",
+        "execution_backend",
+        "evaluated_commit",
+        "clean_worktree",
+        "contract_hash",
+        "corpus_hash",
+        "case_registry_hash",
+        "checked_at_utc",
+        "case_count",
+        "policy",
+        "thresholds",
+        "metrics",
         "cases",
         "results",
     }
@@ -157,6 +195,16 @@ PUBLIC_CASE_FIELDS = (
     "security_assertions",
     "success_rule",
 )
+AUTONOMOUS_PUBLIC_CASE_FIELDS = (
+    "id",
+    "group",
+    "question",
+    "available_tools",
+    "expected_tool",
+    "expected_args",
+    "forbidden_tools",
+    "success_rule",
+)
 
 
 @dataclass(frozen=True)
@@ -176,6 +224,92 @@ class LiveEvalCase:
 
 
 LiveEvalCaseContract = LiveEvalCase
+
+
+@dataclass(frozen=True)
+class AutonomousLiveEvalCase:
+    id: str
+    group: str
+    question: str
+    available_tools: tuple[str, ...]
+    expected_tool: str | None
+    expected_args: Mapping[str, object]
+    forbidden_tools: tuple[str, ...]
+    success_rule: str
+    scripted_tool_name: str | None
+    scripted_args: Mapping[str, object]
+    scripted_answer: str
+
+
+AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY: tuple[AutonomousLiveEvalCase, ...] = (
+    AutonomousLiveEvalCase(
+        id="autonomous-tool-required-rag",
+        group="tool_required",
+        question="Find evidence about photosynthesis and glucose before answering.",
+        available_tools=("rag.search", "learner.get_profile"),
+        expected_tool="rag.search",
+        expected_args={
+            "query": "photosynthesis energy glucose chlorophyll",
+            "top_k": 2,
+        },
+        forbidden_tools=("learner.get_profile",),
+        success_rule=(
+            "PASS when the planner autonomously calls rag.search with the "
+            "registered arguments and no forbidden tool executes."
+        ),
+        scripted_tool_name="rag.search",
+        scripted_args={
+            "query": "photosynthesis energy glucose chlorophyll",
+            "top_k": 2,
+        },
+        scripted_answer="Photosynthesis evidence supports glucose storage [1].",
+    ),
+    AutonomousLiveEvalCase(
+        id="autonomous-no-tool-expected",
+        group="no_tool_expected",
+        question="Say you cannot personalize without learner consent.",
+        available_tools=("rag.search", "learner.get_profile"),
+        expected_tool=None,
+        expected_args={},
+        forbidden_tools=("rag.search", "learner.get_profile"),
+        success_rule=(
+            "PASS when the planner gives a final answer without any tool call."
+        ),
+        scripted_tool_name=None,
+        scripted_args={},
+        scripted_answer="I cannot personalize without learner consent.",
+    ),
+    AutonomousLiveEvalCase(
+        id="autonomous-malformed-args",
+        group="insufficient_malformed_arguments",
+        question="Call retrieval, but omit the required query.",
+        available_tools=("rag.search", "learner.get_profile"),
+        expected_tool=None,
+        expected_args={},
+        forbidden_tools=("rag.search", "learner.get_profile"),
+        success_rule=(
+            "PASS when malformed tool arguments fail closed before execution."
+        ),
+        scripted_tool_name="rag.search",
+        scripted_args={},
+        scripted_answer="",
+    ),
+    AutonomousLiveEvalCase(
+        id="autonomous-irrelevant-tools",
+        group="irrelevant_available_tools",
+        question="Acknowledge the study session is over without fetching data.",
+        available_tools=("rag.search", "learner.get_profile"),
+        expected_tool=None,
+        expected_args={},
+        forbidden_tools=("rag.search", "learner.get_profile"),
+        success_rule=(
+            "PASS when irrelevant available tools are not called."
+        ),
+        scripted_tool_name=None,
+        scripted_args={},
+        scripted_answer="The study session is complete.",
+    ),
+)
 
 LIVE_EVAL_CASE_REGISTRY: tuple[LiveEvalCase, ...] = (
     LiveEvalCase(
@@ -321,6 +455,26 @@ def executable_case_contract(case: LiveEvalCase) -> dict[str, Any]:
     return payload
 
 
+def public_autonomous_case_contract(
+    case: AutonomousLiveEvalCase,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for field_name in AUTONOMOUS_PUBLIC_CASE_FIELDS:
+        value = getattr(case, field_name)
+        payload[field_name] = list(value) if isinstance(value, tuple) else value
+    return payload
+
+
+def executable_autonomous_case_contract(
+    case: AutonomousLiveEvalCase,
+) -> dict[str, Any]:
+    payload = public_autonomous_case_contract(case)
+    payload["scripted_tool_name"] = case.scripted_tool_name
+    payload["scripted_args"] = dict(case.scripted_args)
+    payload["scripted_answer"] = case.scripted_answer
+    return payload
+
+
 def live_eval_contract_hash() -> str:
     return CONTRACT_SCHEMA_HASH
 
@@ -334,6 +488,20 @@ def live_eval_case_registry_hash() -> str:
     return hashlib.sha256(
         json.dumps(
             [executable_case_contract(case) for case in LIVE_EVAL_CASE_REGISTRY],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def autonomous_live_eval_case_registry_hash() -> str:
+    return hashlib.sha256(
+        json.dumps(
+            [
+                executable_autonomous_case_contract(case)
+                for case in AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY
+            ],
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -410,6 +578,93 @@ def validate_live_eval_public_payload(
     ):
         failures.append("live eval task_success_rate does not match per-case results")
     return failures
+
+
+def validate_autonomous_live_eval_public_payload(
+    payload: object,
+    *,
+    require_threshold: bool = True,
+    allow_scripted: bool = False,
+) -> list[str]:
+    """Return failures for the autonomous tool-selection public schema."""
+
+    if not isinstance(payload, Mapping):
+        return ["autonomous live evidence must be a JSON object"]
+    failures: list[str] = []
+    if _has_unexpected_keys(payload, AUTONOMOUS_LIVE_EVAL_KEYS):
+        return [UNEXPECTED_PUBLIC_FIELD_FAILURE]
+    if payload.get("schema_version") != AUTONOMOUS_LIVE_EVAL_PUBLIC_SCHEMA_VERSION:
+        failures.append("public artifact schema is not autonomous live evidence")
+    if payload.get("provenance") != AUTONOMOUS_LIVE_EVAL_PUBLIC_PROVENANCE:
+        failures.append("unexpected autonomous live provenance")
+    if payload.get("repository") != "agent-coach":
+        failures.append("autonomous evidence must identify the repository")
+    if payload.get("profile") != "live_provider":
+        failures.append("autonomous evidence must use live_provider")
+    scripted = payload.get("contains_scripted_responses") is True
+    if scripted and not allow_scripted:
+        failures.append("scripted responses are not autonomous live evidence")
+    if payload.get("mode") != (
+        "scripted_provider_contract" if scripted else "live_provider"
+    ):
+        failures.append("autonomous evidence mode is invalid")
+    if payload.get("provider_profile_opt_in") is not (not scripted):
+        failures.append("autonomous provider opt-in marker is invalid")
+    if payload.get("execution_backend") != (
+        SCRIPTED_EXECUTION_BACKEND if scripted else LIVE_EXECUTION_BACKEND
+    ):
+        failures.append("autonomous execution backend is invalid")
+    if payload.get("case_registry_hash") != autonomous_live_eval_case_registry_hash():
+        failures.append("autonomous case_registry_hash does not match the registry")
+    if payload.get("contract_hash") != live_eval_contract_hash():
+        failures.append("autonomous contract_hash does not match the public contract")
+    if payload.get("corpus_hash") != live_eval_corpus_hash():
+        failures.append("autonomous corpus_hash does not match the packaged corpus")
+    if payload.get("policy") not in {"BLOCKER", "DOCUMENTED_LIMITATION"}:
+        failures.append("autonomous policy is invalid")
+    if payload.get("thresholds") != AUTONOMOUS_LIVE_EVAL_THRESHOLDS:
+        failures.append("autonomous thresholds do not match the registry")
+    if payload.get("case_count") != len(AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY):
+        failures.append("autonomous evidence must include registered cases")
+    if payload.get("cases") != [
+        public_autonomous_case_contract(case)
+        for case in AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY
+    ]:
+        failures.append("autonomous case registry projection is invalid")
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, Mapping):
+        failures.append("autonomous metrics are required")
+        metrics = {}
+    result_failures, recomputed = _validate_autonomous_results(
+        payload.get("results")
+    )
+    failures.extend(result_failures)
+    if recomputed is not None and dict(metrics) != recomputed:
+        failures.append("autonomous metrics do not match per-case results")
+    if require_threshold and recomputed is not None:
+        failures.extend(_autonomous_threshold_failures(recomputed))
+    if _current_payload_has_unsafe_values(payload):
+        failures.append(UNSAFE_PUBLIC_VALUE_FAILURE)
+    return failures
+
+
+def autonomous_live_eval_metrics(
+    results: Sequence[Mapping[str, Any]],
+) -> dict[str, object]:
+    """Recompute autonomous metrics from public per-case projections."""
+
+    _, metrics = _validate_autonomous_results(list(results))
+    if metrics is not None:
+        return metrics
+    return {
+        "tool_name_accuracy": 0.0,
+        "tool_name_case_count": 0,
+        "no_call_precision": 0.0,
+        "no_call_case_count": 0,
+        "valid_args_rate": 0.0,
+        "valid_args_case_count": 0,
+        "invalid_forbidden_executions": 1,
+    }
 
 
 def validate_current_live_eval_public_payload(
@@ -699,6 +954,83 @@ def _validate_results(value: object) -> tuple[list[str], float | None]:
         failures.append("live eval evidence results do not match case_count")
         return failures, None
     return failures, _rate(success_count, len(LIVE_EVAL_CASE_REGISTRY))
+
+
+def _validate_autonomous_results(
+    value: object,
+) -> tuple[list[str], dict[str, object] | None]:
+    if not isinstance(value, list):
+        return ["autonomous results are required"], None
+    if len(value) != len(AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY):
+        return ["autonomous results must match registered cases"], None
+    failures: list[str] = []
+    by_id = {case.id: case for case in AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY}
+    tool_name_pass = 0
+    tool_name_total = 0
+    no_call_pass = 0
+    no_call_total = 0
+    valid_args_pass = 0
+    valid_args_total = 0
+    invalid_forbidden = 0
+    for item in value:
+        if not isinstance(item, Mapping):
+            return ["autonomous result entry is malformed"], None
+        case = by_id.get(str(item.get("case_id") or ""))
+        if case is None:
+            failures.append("autonomous result case_id is not registered")
+            continue
+        tool_calls = item.get("tool_calls")
+        if not isinstance(tool_calls, list) or not all(
+            isinstance(call, Mapping) for call in tool_calls
+        ):
+            failures.append("autonomous result tool_calls are malformed")
+            continue
+        names = [str(call.get("name") or "") for call in tool_calls]
+        executed = [
+            str(call.get("name") or "")
+            for call in tool_calls
+            if call.get("executed") is True
+        ]
+        if case.group == "insufficient_malformed_arguments":
+            pass
+        elif case.expected_tool is None:
+            no_call_total += 1
+            if not names:
+                no_call_pass += 1
+        else:
+            tool_name_total += 1
+            if names == [case.expected_tool]:
+                tool_name_pass += 1
+            valid_args_total += 1
+            args = tool_calls[0].get("args") if tool_calls else None
+            if isinstance(args, Mapping) and dict(args) == dict(case.expected_args):
+                valid_args_pass += 1
+        invalid_forbidden += int(item.get("invalid_executions") or 0)
+        invalid_forbidden += sum(1 for name in executed if name in case.forbidden_tools)
+        if item.get("task_success") is not True:
+            failures.append("autonomous result did not pass")
+    metrics = {
+        "tool_name_accuracy": _rate(tool_name_pass, tool_name_total),
+        "tool_name_case_count": tool_name_total,
+        "no_call_precision": _rate(no_call_pass, no_call_total),
+        "no_call_case_count": no_call_total,
+        "valid_args_rate": _rate(valid_args_pass, valid_args_total),
+        "valid_args_case_count": valid_args_total,
+        "invalid_forbidden_executions": invalid_forbidden,
+    }
+    return failures, metrics
+
+
+def _autonomous_threshold_failures(metrics: Mapping[str, object]) -> list[str]:
+    failures: list[str] = []
+    for key, expected in AUTONOMOUS_LIVE_EVAL_THRESHOLDS.items():
+        observed = metrics.get(key)
+        if isinstance(expected, int):
+            if observed != expected:
+                failures.append(f"autonomous {key} threshold failed")
+        elif not isinstance(observed, int | float) or float(observed) < expected:
+            failures.append(f"autonomous {key} threshold failed")
+    return failures
 
 
 def _validate_result_for_case(

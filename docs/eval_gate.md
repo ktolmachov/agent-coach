@@ -104,6 +104,17 @@ Evidence JSON files are capped at 64000 bytes each. A live task success rate
 below 80% adds `live_evidence_below_threshold` to promotion blockers while the
 offline `gate_status` remains determined only by offline cases.
 
+Autonomous planner tool-selection evidence is separate from the forced
+grounding live evidence above. The autonomous harness uses provider
+`tool_choice: auto` and does not pass a `PlannerToolRequirement`; its public
+schema is `agent-coach-autonomous-live-eval-public/1.0.0` and reports
+tool-name accuracy, no-call precision, valid-args rate and invalid/forbidden
+executions. Current policy is `DOCUMENTED_LIMITATION`: absent or failing
+autonomous evidence is reported under `autonomous_live_evidence`, but it is not
+used as a promotion blocker and must not be described as measured autonomous
+planner accuracy for D11 promotion. A scripted autonomous run validates only the
+offline runner/schema contract, not live model behavior.
+
 The default CLI exit code follows offline `gate_status`. Supplying
 `--live-evidence`, `--clean-release-evidence` or `--require-promotion` switches
 the exit code to `promotion_status`. Promotion-mode `--output` paths must be
@@ -124,6 +135,11 @@ forces the provider-native `rag.search` function choice and supplies the exact
 pre-registered query arguments for each case. The adapter rejects a missing
 call, a different tool or changed arguments instead of silently substituting a
 local call. Answer synthesis still runs through the configured live provider.
+
+The autonomous harness is invoked separately with
+`python scripts/run_live_eval.py --autonomous`. Offline validation uses
+`--autonomous --scripted`; a live autonomous artifact still requires
+`--allow-network --provider-opt-in` and should be written outside the checkout.
 This suite is forced-grounding evidence only; confirmed autonomous planner
 accuracy requires the separate `tool_choice: auto` harness and later live
 artifact.

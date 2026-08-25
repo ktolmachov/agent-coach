@@ -15,12 +15,20 @@ from typing import Any
 from agent_coach.core.contracts import AgentRunResult
 from agent_coach.core.security import trace_text
 from agent_coach.eval.live_evidence import (
+    AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY,
+    AUTONOMOUS_LIVE_EVAL_PUBLIC_PROVENANCE,
+    AUTONOMOUS_LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
+    AUTONOMOUS_LIVE_EVAL_THRESHOLDS,
+    AUTONOMOUS_LIVE_POLICY,
     LIVE_EVAL_CASES,
     LIVE_EVAL_PUBLIC_PROVENANCE,
     LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
     LIVE_EXECUTION_BACKEND,
     SCRIPTED_EXECUTION_BACKEND,
+    AutonomousLiveEvalCase,
     LiveEvalCase,
+    autonomous_live_eval_case_registry_hash,
+    autonomous_live_eval_metrics,
     bounded_live_eval_failure,
     is_historical_live_eval_path,
     is_historical_live_eval_payload,
@@ -28,7 +36,9 @@ from agent_coach.eval.live_evidence import (
     live_eval_contract_hash,
     live_eval_corpus_hash,
     load_live_eval_public_payload,
+    public_autonomous_case_contract,
     public_case_contract,
+    validate_autonomous_live_eval_public_payload,
     validate_current_live_eval_public_payload,
 )
 from agent_coach.profiles.live import build_live_composition
@@ -70,6 +80,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Use a scripted Responses client for offline runner validation.",
     )
     parser.add_argument(
+        "--autonomous",
+        action="store_true",
+        help="Run the separate autonomous tool-selection eval.",
+    )
+    parser.add_argument(
         "--allow-network",
         action="store_true",
         help="Acknowledge that live mode may call the provider network.",
@@ -106,6 +121,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     _configure_stdout()
     args = build_arg_parser().parse_args(argv)
     if args.wrapper_only:
+        if args.autonomous:
+            print("--wrapper-only is only for forced live evidence", file=sys.stderr)
+            return 2
         if args.wrapper_output is None or args.public_artifact is None:
             print(
                 "--wrapper-only requires --public-artifact and --wrapper-output",
@@ -135,7 +153,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        artifact = run_live_eval(scripted=args.scripted)
+        artifact = (
+            run_autonomous_live_eval(scripted=args.scripted)
+            if args.autonomous
+            else run_live_eval(scripted=args.scripted)
+        )
     except LiveConfigurationError as exc:
         print(f"live configuration error: {trace_text(exc)}", file=sys.stderr)
         return 2
@@ -154,6 +176,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("current live evidence requires a clean worktree", file=sys.stderr)
         return 2
     print(encoded, end="")
+    if args.autonomous:
+        failures = validate_autonomous_live_eval_public_payload(
+            artifact,
+            allow_scripted=args.scripted,
+        )
+        return 0 if not failures else 1
     return 0 if artifact["task_success_rate"] >= PASS_THRESHOLD else 1
 
 
@@ -216,6 +244,62 @@ def run_live_eval(*, scripted: bool = False) -> dict[str, Any]:
         "cases": [public_case_contract(case) for case in LIVE_EVAL_CASES],
         "results": [_without_config(result) for result in results],
     }
+
+
+def run_autonomous_live_eval(*, scripted: bool = False) -> dict[str, Any]:
+    """Run the autonomous tool-selection eval harness."""
+
+    live_config = _scripted_config() if scripted else load_live_provider_config()
+    results = [
+        _run_autonomous_case(case, scripted=scripted, config=live_config)
+        for case in AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY
+    ]
+    evaluated_commit, clean_worktree = _git_provenance()
+    metrics = _autonomous_metrics(results)
+    return {
+        "schema_version": AUTONOMOUS_LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
+        "provenance": AUTONOMOUS_LIVE_EVAL_PUBLIC_PROVENANCE,
+        "repository": "agent-coach",
+        "profile": "live_provider",
+        "mode": "scripted_provider_contract" if scripted else "live_provider",
+        "contains_scripted_responses": scripted,
+        "provider_profile_opt_in": not scripted,
+        "execution_backend": (
+            SCRIPTED_EXECUTION_BACKEND if scripted else LIVE_EXECUTION_BACKEND
+        ),
+        "evaluated_commit": evaluated_commit,
+        "clean_worktree": clean_worktree,
+        "contract_hash": live_eval_contract_hash(),
+        "corpus_hash": live_eval_corpus_hash(),
+        "case_registry_hash": autonomous_live_eval_case_registry_hash(),
+        "checked_at_utc": _utc_now(),
+        "case_count": len(results),
+        "policy": AUTONOMOUS_LIVE_POLICY,
+        "thresholds": AUTONOMOUS_LIVE_EVAL_THRESHOLDS,
+        "metrics": metrics,
+        "cases": [
+            public_autonomous_case_contract(case)
+            for case in AUTONOMOUS_LIVE_EVAL_CASE_REGISTRY
+        ],
+        "results": results,
+    }
+
+
+def _run_autonomous_case(
+    case: AutonomousLiveEvalCase, *, scripted: bool, config: LiveProviderConfig
+) -> dict[str, Any]:
+    client = _autonomous_scripted_client(case) if scripted else None
+    try:
+        composition = build_live_composition(
+            case.question,
+            config=config,
+            client=client,
+            run_id=f"autonomous-live-eval-{case.id}",
+        )
+        result = composition.runner.run(composition.request)
+    except (LiveConfigurationError, ProviderAdapterError) as exc:
+        return _autonomous_failure_projection(case, exc)
+    return _autonomous_result_projection(case, result)
 
 
 def _run_case(
@@ -341,6 +425,83 @@ def _result_projection(case: LiveEvalCase, result: AgentRunResult) -> dict[str, 
     }
 
 
+def _autonomous_result_projection(
+    case: AutonomousLiveEvalCase,
+    result: AgentRunResult,
+) -> dict[str, Any]:
+    tool_calls = [
+        {
+            "name": str(step.tool_name),
+            "args": dict(step.tool_args),
+            "executed": step.tool_result is not None,
+            "error": step.error,
+        }
+        for step in result.steps
+        if isinstance(step.tool_name, str)
+    ]
+    names = [call["name"] for call in tool_calls]
+    executed_names = [call["name"] for call in tool_calls if call["executed"] is True]
+    expected_tool = case.expected_tool
+    if expected_tool is None:
+        tool_name_ok = not names
+        args_ok = True
+    else:
+        tool_name_ok = names == [expected_tool]
+        args_ok = bool(tool_calls) and tool_calls[0]["args"] == dict(
+            case.expected_args
+        )
+    invalid_executions = sum(1 for call in tool_calls if call["error"])
+    forbidden_executions = [
+        name for name in executed_names if name in case.forbidden_tools
+    ]
+    task_success = (
+        tool_name_ok
+        and args_ok
+        and invalid_executions == 0
+        and not forbidden_executions
+    )
+    if case.group == "insufficient_malformed_arguments":
+        task_success = (
+            result.stop_reason.value == "invalid_decision"
+            and bool(tool_calls)
+            and not executed_names
+        )
+        invalid_executions = 0
+    return {
+        "case_id": case.id,
+        "group": case.group,
+        "task_success": task_success,
+        "answer_status": result.answer_status,
+        "stop_reason": result.stop_reason.value,
+        "state": result.state.value,
+        "tool_calls": tool_calls,
+        "invalid_executions": invalid_executions,
+        "forbidden_tool_executions": forbidden_executions,
+    }
+
+
+def _autonomous_failure_projection(
+    case: AutonomousLiveEvalCase,
+    exc: Exception,
+) -> dict[str, Any]:
+    return {
+        "case_id": case.id,
+        "group": case.group,
+        "task_success": False,
+        "error": trace_text(exc),
+        "answer_status": "abstain",
+        "stop_reason": _provider_error_code(exc),
+        "state": "stopped",
+        "tool_calls": [],
+        "invalid_executions": 0,
+        "forbidden_tool_executions": [],
+    }
+
+
+def _autonomous_metrics(results: Sequence[Mapping[str, Any]]) -> dict[str, object]:
+    return autonomous_live_eval_metrics(results)
+
+
 def _source_projection(source: Mapping[str, Any]) -> dict[str, Any]:
     return {
         key: source[key]
@@ -464,6 +625,50 @@ def _scripted_client(case: LiveEvalCase) -> ScriptedResponsesClient:
                 prompt_tokens=10,
                 completion_tokens=14,
                 total_tokens=24,
+            ),
+        ]
+    )
+
+
+def _autonomous_scripted_client(
+    case: AutonomousLiveEvalCase,
+) -> ScriptedResponsesClient:
+    if case.scripted_tool_name is None:
+        return ScriptedResponsesClient(
+            [
+                NormalizedResponse(
+                    response_id=f"{case.id}-planner",
+                    status="completed",
+                    output_text=case.scripted_answer,
+                    prompt_tokens=8,
+                    completion_tokens=6,
+                    total_tokens=14,
+                ),
+            ]
+        )
+    return ScriptedResponsesClient(
+        [
+            NormalizedResponse(
+                response_id=f"{case.id}-planner",
+                status="completed",
+                function_calls=(
+                    NormalizedFunctionCall(
+                        call_id=f"{case.id}-call",
+                        name=case.scripted_tool_name,
+                        arguments_json=json.dumps(case.scripted_args, sort_keys=True),
+                    ),
+                ),
+                prompt_tokens=10,
+                completion_tokens=4,
+                total_tokens=14,
+            ),
+            NormalizedResponse(
+                response_id=f"{case.id}-synthesizer",
+                status="completed",
+                output_text=case.scripted_answer,
+                prompt_tokens=8,
+                completion_tokens=8,
+                total_tokens=16,
             ),
         ]
     )
