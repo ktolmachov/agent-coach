@@ -1,57 +1,17 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:01:42Z",
+  "updated_at_utc": "2026-08-25T16:04:43Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "bf6ae6e9ec3449953ea802e744e5b2964c2d2941",
-  "observed_head": "bf6ae6e9ec3449953ea802e744e5b2964c2d2941",
+  "base_head": "341e1405db95f6112964d287ed94287f9d4a83db",
+  "observed_head": "341e1405db95f6112964d287ed94287f9d4a83db",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "596b1a87248b3f1a8bb749579200851d629b697c1a2c82bcb5e127db4176bda9",
+  "checkpoint_fingerprint_sha256": "235eef3eea0b110304e443fb23779bafd228a2c4099b51e5b56ed43d77da07ca",
   "fingerprinted_files": [
     {
-      "path": "README.md",
-      "sha256": "9aa377d78c87b3cbf5379f151dc442a3057b3bd86ae8ee5c36dee056095c9215",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/eval_gate.md",
-      "sha256": "842cdb62fc8c1a3f63e262e64ed0a66cbc7d9cb0ee93cb635de0801df1fd7915",
-      "state": "MODIFY"
-    },
-    {
       "path": "docs/evidence/historical/live-eval-public.json",
-      "sha256": "1acc070b6918efbd7d359a6157512efd3adf5b506007d1f970c319a5c91930c7",
-      "state": "ADD"
-    },
-    {
-      "path": "docs/evidence/live-eval-public.json",
-      "sha256": "293ec69a98eba4fc7c32dae4a91a19c96dd71beff16f833158d4a3275f9676a6",
-      "state": "DELETE"
-    },
-    {
-      "path": "scripts/check_public_release.py",
-      "sha256": "e06f1cea5d5c603229441b88729098e72165ae81142ff17830a282eb920cc7b9",
-      "state": "MODIFY"
-    },
-    {
-      "path": "scripts/run_live_eval.py",
-      "sha256": "0d516064164843a3942672272041d8d35978ad6bf12ebff62631e3afdb8b2d9a",
-      "state": "MODIFY"
-    },
-    {
-      "path": "src/agent_coach/eval/live_evidence.py",
-      "sha256": "5e7f02dd1f795dbb7019f4a0bbfa43381cf707763894ee26f14deca11424fec0",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_live_eval_runner.py",
-      "sha256": "adf88960f1eb5847e7c24b8899bf45f6217885d573e844a87d907722c382e785",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_public_release_gate.py",
-      "sha256": "bc7547807826c0d1ab40863a8641c02136e6a12442c401ca8fe16a5d9d73777d",
+      "sha256": "1954b49cf639cf1e1e9f86240ba5b48f6a051303a3e1a030f9b4922c2603b8e8",
       "state": "MODIFY"
     }
   ],
@@ -67,53 +27,13 @@
   "provider_cost_status": "zero",
   "changed_files": [
     {
-      "path": "README.md",
-      "purpose": "Document external current live evidence output path.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/eval_gate.md",
-      "purpose": "Document causal current live evidence and historical example separation.",
-      "state": "MODIFY"
-    },
-    {
       "path": "docs/evidence/historical/live-eval-public.json",
-      "purpose": "Track historical live artifact as historical_example only.",
-      "state": "ADD"
-    },
-    {
-      "path": "docs/evidence/live-eval-public.json",
-      "purpose": "Remove ambiguous current tracked live artifact from promotion path.",
-      "state": "DELETE"
-    },
-    {
-      "path": "scripts/check_public_release.py",
-      "purpose": "Validate current and historical live evidence contracts separately.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "scripts/run_live_eval.py",
-      "purpose": "Use canonical registry, causal provenance, and safe external output guards.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "src/agent_coach/eval/live_evidence.py",
-      "purpose": "Define canonical live registry/hash and current/historical public evidence validators.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_live_eval_runner.py",
-      "purpose": "Cover B1 live registry, provenance, path guard, and post-check failure behavior.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_public_release_gate.py",
-      "purpose": "Cover B1 public release handling for current and historical evidence.",
+      "purpose": "Compact the tracked historical live artifact so Git and the validator treat it as an explicit historical ADD/MODIFY boundary, not current promotion evidence.",
       "state": "MODIFY"
     },
     {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package B1 COMPLETE+PASS READY_TO_COMMIT checkpoint.",
+      "purpose": "Record Package B1 corrective READY_TO_COMMIT checkpoint.",
       "state": "MODIFY"
     }
   ],
@@ -137,26 +57,8 @@
       "result": "PASS"
     },
     {
-      "id": "ruff_touched_python",
-      "command": "python -m ruff check src/agent_coach/eval/live_evidence.py scripts/run_live_eval.py scripts/check_public_release.py tests/test_live_eval_runner.py tests/test_public_release_gate.py",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "compileall_touched_python",
-      "command": "python -m compileall -q src/agent_coach/eval/live_evidence.py scripts/run_live_eval.py scripts/check_public_release.py tests/test_live_eval_runner.py tests/test_public_release_gate.py",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
       "id": "status_validator_cli",
       "command": "python scripts/check_d11_remediation_status.py",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "git_diff_check",
-      "command": "git diff --check",
       "platform": "win32/Windows",
       "result": "PASS"
     }
@@ -168,6 +70,7 @@
     "d11_promotion_gate"
   ],
   "remaining_risks": [
+    "B1 required a corrective commit because the first B1 checkpoint was rejected by clean-head validator rename fingerprinting.",
     "D11 promotion remains HOLD pending E2 live and clean-release evidence.",
     "No provider network or live evidence was run in B1.",
     "docs/release_checklist.md C2 wording remains deferred because it is outside the B1 validator write-set."
@@ -175,7 +78,7 @@
   "blockers": [],
   "last_completed_package": "B1",
   "next_allowed_package": "B2",
-  "exact_resume_instruction": "On clean HEAD after committing this B1 READY_TO_COMMIT snapshot, verify scripts/check_d11_remediation_status.py, then start Package B2. Do not run provider network or E2 live evidence.",
+  "exact_resume_instruction": "On clean HEAD after committing this B1 corrective READY_TO_COMMIT snapshot, verify scripts/check_d11_remediation_status.py, then start Package B2. Do not run provider network or E2 live evidence.",
   "package_ledger": [
     {
       "package": "A",
@@ -275,6 +178,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "30766955014fd24459c7cae7c26e9f9f38901c5826ee9534643b6a883070d427",
       "entry_sha256": "9d98cf5cb3c01c172ed153f1a20b56e18a37585543b875c22a344afa56ccb68e"
+    },
+    {
+      "package": "B1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "341e1405db95f6112964d287ed94287f9d4a83db",
+      "completed_at_utc": "2026-08-25T16:04:43Z",
+      "evidence_summary": "Corrected B1 historical artifact boundary after clean-head validator rejected rename-style fingerprint; B1 focused checks still PASS.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "9d98cf5cb3c01c172ed153f1a20b56e18a37585543b875c22a344afa56ccb68e",
+      "entry_sha256": "9c5028a7de057be4c726d79dad2bc4ae5b428b345e1dd35f1b7762d979349c0c"
     }
   ]
 }
