@@ -1,50 +1,14 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:15:54Z",
+  "updated_at_utc": "2026-08-25T16:16:52Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "3539220cbc806f9cc797a690e627623b72578265",
-  "observed_head": "3539220cbc806f9cc797a690e627623b72578265",
+  "base_head": "e4178bb70cc1b6ed2c980977cbfc11d19f1417be",
+  "observed_head": "e4178bb70cc1b6ed2c980977cbfc11d19f1417be",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "e3673a07400c23c04b181e682b04f60a462ddac7a63606d5cd7fb0fa9c340cb9",
-  "fingerprinted_files": [
-    {
-      "path": ".github/workflows/ci.yml",
-      "sha256": "3dcaf2b1df2db8e964ed0504d817d931462410c025b090241a2e0c5a7117075c",
-      "state": "MODIFY"
-    },
-    {
-      "path": "AGENTS.md",
-      "sha256": "934891770064f49e28a6c11c6ab5a1f2f20ba333a92c9ed7ef4d1c178472dd3d",
-      "state": "MODIFY"
-    },
-    {
-      "path": "CONTRIBUTING.md",
-      "sha256": "c1a85213780bbafcb6f68a723a3b7f7ecc1bb69dfa1129da4aed8e87e729299f",
-      "state": "MODIFY"
-    },
-    {
-      "path": "README.md",
-      "sha256": "b5e7879fec61552caa4046f1cee43319308e39615a7bd8a127ad59bffd02870c",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/release_checklist.md",
-      "sha256": "30de2d3fd395f7090ea781b2cf3e73e99536c2f6aad11b51f5667222c47f478f",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/review_kit.md",
-      "sha256": "8a836469c2125cb1be69a572df4363606ef945ac22703b589d7e44ef14fa52b3",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_public_release_gate.py",
-      "sha256": "dd03150b79c06c45e2b99ed406b7b2ceddecd8ce84f739fe5fb9f8a8e9e6fd1c",
-      "state": "MODIFY"
-    }
-  ],
+  "checkpoint_fingerprint_sha256": "c24d6da950dabc092220267c0da1595e149a43f99bb032180572d9df931eb7b9",
+  "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
   "session_started_at_utc": "2026-08-25T16:13:10Z",
@@ -57,43 +21,8 @@
   "provider_cost_status": "zero",
   "changed_files": [
     {
-      "path": ".github/workflows/ci.yml",
-      "purpose": "Run compileall on src and scripts, offline eval without live/promotion flags, strict release hygiene, and D11 status validator in CI.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "AGENTS.md",
-      "purpose": "Remove stale concrete slice-status wording from the always-on contract.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "CONTRIBUTING.md",
-      "purpose": "Document Windows PowerShell virtualenv checks and offline eval policy.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "README.md",
-      "purpose": "List D11 status validator in routine offline checks.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/release_checklist.md",
-      "purpose": "Use external current live evidence paths and keep checkout clean.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/review_kit.md",
-      "purpose": "Separate Windows/POSIX commands and external live evidence paths.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_public_release_gate.py",
-      "purpose": "Cover CI offline eval/status/strict-release command invariants.",
-      "state": "MODIFY"
-    },
-    {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package C2 COMPLETE+PASS READY_TO_COMMIT checkpoint.",
+      "purpose": "Record Package C2 corrective READY_TO_COMMIT checkpoint after clean-head line-ending fingerprint normalization.",
       "state": "MODIFY"
     }
   ],
@@ -107,6 +36,12 @@
     {
       "id": "public_release",
       "command": "python scripts/check_public_release.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "strict_public_release_hygiene",
+      "command": "python scripts/check_public_release.py --release",
       "platform": "win32/Windows",
       "result": "PASS"
     },
@@ -136,14 +71,13 @@
     }
   ],
   "checks_not_run": [
-    "strict_public_release_on_clean_head",
     "full_pytest_suite",
     "live_provider_eval",
     "fresh_clone_clean_release",
     "d11_promotion_gate"
   ],
   "remaining_risks": [
-    "Strict public release was not recorded as passed for the dirty package tree; rerun on clean HEAD after commit.",
+    "C2 required a status-only corrective commit because line-ending normalization changed committed blob hashes.",
     "Linux CI matrix remains useful compatibility evidence but does not prove the Windows localhost flake is eliminated.",
     "D11 promotion remains HOLD pending E2 live and clean-release evidence.",
     "No provider network or live evidence was run in C2."
@@ -151,7 +85,7 @@
   "blockers": [],
   "last_completed_package": "C2",
   "next_allowed_package": "D0",
-  "exact_resume_instruction": "On clean HEAD after committing this C2 READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py and strict public release hygiene, then start Package D0. Do not run provider network or E2 live evidence.",
+  "exact_resume_instruction": "On clean HEAD after committing this C2 corrective READY_TO_COMMIT status checkpoint, verify scripts/check_d11_remediation_status.py, then start Package D0. Do not run provider network or E2 live evidence.",
   "package_ledger": [
     {
       "package": "A",
@@ -339,6 +273,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "a48908856c54229392b5e2f9f9cbc93d849b73525cb22a44ea59034bfad99eb4",
       "entry_sha256": "c0797c82be2c0aa1da98f98feb4f4c88af6f297247c55619454c87002961467e"
+    },
+    {
+      "package": "C2",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "e4178bb70cc1b6ed2c980977cbfc11d19f1417be",
+      "completed_at_utc": "2026-08-25T16:16:52Z",
+      "evidence_summary": "Corrected C2 status checkpoint after clean-head line-ending fingerprint normalization; strict public release passes on clean HEAD.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "c0797c82be2c0aa1da98f98feb4f4c88af6f297247c55619454c87002961467e",
+      "entry_sha256": "37cb9fe7dbd77c95c7c6b674b550fecab84b962dd96a686eee931e33ec8a82a4"
     }
   ]
 }
