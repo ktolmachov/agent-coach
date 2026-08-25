@@ -25,7 +25,7 @@ def test_d11_eval_suite_freezes_thresholds_and_case_count() -> None:
     categories = {case["category"] for case in suite["cases"]}
 
     assert suite["schema_version"] == "agent-coach-diploma-eval/1.0.0"
-    assert suite["suite_version"] == "1.0.0"
+    assert suite["suite_version"] == "2.0.0"
     assert suite["provenance"] == gate.EXPECTED_PROVENANCE
     assert len(suite["cases"]) == gate.EXPECTED_CASE_COUNT
     assert tuple(case["id"] for case in suite["cases"]) == gate.EXPECTED_CASE_IDS
@@ -63,6 +63,14 @@ def test_d11_eval_gate_passes_offline_and_reports_promotion_hold() -> None:
     assert "clean_release_evidence_unavailable" in report["promotion_blockers"]
     assert report["metrics"]["offline_golden_pass_rate"] == 1.0
     assert report["metrics"]["retrieval_top1_accuracy"] >= 0.8
+    assert report["metrics"]["retrieval_negative_rejection_rate"] == 1.0
+    assert report["metrics"]["retrieval_negative_case_count"] == 10
+    assert report["metrics"]["adapter_contract_fail_closed_rate"] == 1.0
+    assert report["metrics"]["adapter_contract_case_count"] == 4
+    assert report["metrics"]["security_containment_rate"] == 1.0
+    assert report["metrics"]["security_containment_case_count"] == 6
+    assert report["metrics"]["exact_budget_stop_reason_rate"] == 1.0
+    assert report["metrics"]["exact_budget_stop_reason_case_count"] == 4
     assert report["metrics"]["invalid_unknown_tool_executions"] == 0
     assert report["metrics"]["security_assertion_failures"] == 0
     assert report["metrics"]["hidden_writes"] == 0
@@ -597,7 +605,7 @@ def test_malformed_suite_thresholds_and_category_labels_fail_closed(
     short_suite = deepcopy(suite)
     short_suite["cases"] = short_suite["cases"][:-1]
     short_suite_path = _write_suite(tmp_path, short_suite, "short-suite.json")
-    with pytest.raises(ValueError, match="exactly 27"):
+    with pytest.raises(ValueError, match="exactly 47"):
         load_eval_suite(short_suite_path)
 
     empty_id = deepcopy(suite)
