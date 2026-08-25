@@ -1,17 +1,17 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T19:46:05Z",
+  "updated_at_utc": "2026-08-25T19:56:59Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "c06bb13a5dba000a59e2b6f6653dcf55b4f47724",
-  "observed_head": "c06bb13a5dba000a59e2b6f6653dcf55b4f47724",
+  "base_head": "5ff8245f14c47f0f95ddfb2b6a8c24a496da3059",
+  "observed_head": "5ff8245f14c47f0f95ddfb2b6a8c24a496da3059",
   "observed_origin_main": "c06bb13a5dba000a59e2b6f6653dcf55b4f47724",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "5ec03f2d1c5270cf020942a0f89e8b07d5cef81019c781e4f3d0f81d37c5b289",
+  "checkpoint_fingerprint_sha256": "4dad6d1e5c1bc478b1456d6c7a24c32154bd992b262eeb270527ff8bae28c7f9",
   "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T19:46:05Z",
+  "session_started_at_utc": "2026-08-25T19:56:59Z",
   "lease_status": "RELEASED",
   "current_package": "E1",
   "implementation_status": "COMPLETE",
@@ -22,26 +22,26 @@
   "changed_files": [
     {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record E1 READY_TO_COMMIT checkpoint after origin/main synchronized with corrective gate commit.",
+      "purpose": "Record E1 READY_TO_COMMIT checkpoint after E2 handoff validator accepted external labels.",
       "state": "MODIFY"
     }
   ],
   "checks_passed": [
     {
       "id": "autonomous_harness_suite",
-      "command": "python -m pytest tests/test_eval_gate.py tests/test_live_eval_runner.py",
+      "command": "python -m pytest tests/test_d11_remediation_status.py",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
       "id": "ruff_touched_python",
-      "command": "python -m ruff check src/agent_coach/eval/gate.py tests/test_eval_gate.py",
+      "command": "python -m ruff check scripts/check_d11_remediation_status.py tests/test_d11_remediation_status.py",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
       "id": "compileall_touched_python",
-      "command": "python -m compileall -q src/agent_coach/eval/gate.py tests/test_eval_gate.py",
+      "command": "python -m compileall -q scripts/check_d11_remediation_status.py tests/test_d11_remediation_status.py",
       "platform": "win32/Windows",
       "result": "PASS"
     }
@@ -379,6 +379,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "345d459a2ac0aeda3bd0fdbbdc55118ef04de53833a126b27e4167d68b0b4b63",
       "entry_sha256": "3834c705d508e26269b18023608a5448f8d212a7bec82c267eec6783d1704583"
+    },
+    {
+      "package": "E1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "5ff8245f14c47f0f95ddfb2b6a8c24a496da3059",
+      "completed_at_utc": "2026-08-25T19:56:59Z",
+      "evidence_summary": "Recorded E1 checkpoint after E2 handoff validator accepted external live artifact labels; E2 remains next and promotion HOLD.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "3834c705d508e26269b18023608a5448f8d212a7bec82c267eec6783d1704583",
+      "entry_sha256": "e4d1b7f2b81c38914cb2057f90bf73ea32c5610d765b31fe8f67d32a794bc920"
     }
   ]
 }
