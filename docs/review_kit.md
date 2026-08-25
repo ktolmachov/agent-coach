@@ -6,6 +6,17 @@ private HomeTutor checkout.
 
 ## Five-Minute Quickstart
 
+Windows PowerShell, from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe scripts/run_diploma_demo.py
+.\.venv\Scripts\python.exe scripts/run_eval_gate.py
+```
+
+POSIX:
+
 ```bash
 python -m pip install -e ".[dev]"
 python -m pytest
@@ -260,7 +271,21 @@ python scripts/run_eval_gate.py --live-evidence ../agent-coach-live-wrapper.json
 
 Without real evidence, `promotion_status: HOLD` is the expected safe result.
 
-Run the full public check sequence:
+Run the full public check sequence on Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m compileall src scripts
+.\.venv\Scripts\python.exe scripts/check_contract_export.py
+.\.venv\Scripts\python.exe scripts/check_openapi_snapshot.py
+.\.venv\Scripts\python.exe scripts/check_drift_gate.py
+.\.venv\Scripts\python.exe scripts/check_public_release.py
+.\.venv\Scripts\python.exe scripts/check_d11_remediation_status.py
+.\.venv\Scripts\python.exe scripts/run_eval_gate.py
+```
+
+Run the full public check sequence on POSIX:
 
 ```bash
 python -m pytest
@@ -270,6 +295,7 @@ python scripts/check_contract_export.py
 python scripts/check_openapi_snapshot.py
 python scripts/check_drift_gate.py
 python scripts/check_public_release.py
+python scripts/check_d11_remediation_status.py
 python scripts/run_eval_gate.py
 ```
 
@@ -286,12 +312,13 @@ Strict final release mode adds clean-tree and D11 artifact requirements:
 python scripts/check_public_release.py --release
 ```
 
-The strict mode is expected to fail until the reviewed commit is clean and
-`docs/evidence/live-eval-public.json` exists as redacted opt-in live-provider
-evidence. Scripted Responses validation is useful for testing the runner, but
-it is not live evidence and is rejected as a release artifact. Empty or
-incomplete result objects are also rejected; the gate recomputes the live task
-success rate from registered per-case results.
+The strict mode is repository hygiene, not promotion. It may pass before D11
+promotion because current live and clean-release evidence are supplied to the
+promotion gate from external files, not tracked as repo-local current evidence.
+Scripted Responses validation is useful for testing the runner, but it is not
+live evidence and is rejected as a release artifact. Empty or incomplete result
+objects are also rejected; the gate recomputes the live task success rate from
+registered per-case results.
 
 ## Live Provider Evidence
 
@@ -312,14 +339,14 @@ Opt-in live collection, after explicit approval for network, credentials,
 models and possible cost:
 
 ```bash
-python scripts/run_live_eval.py --allow-network --provider-opt-in --output docs/evidence/live-eval-public.json
+python scripts/run_live_eval.py --allow-network --provider-opt-in --output ../agent-coach-live-eval-public.json
 ```
 
 After the reviewed commit exists, write the external wrapper that binds the
 public artifact hash to that immutable commit:
 
 ```bash
-python scripts/run_live_eval.py --wrapper-only --public-artifact docs/evidence/live-eval-public.json --wrapper-output ../agent-coach-live-wrapper.json
+python scripts/run_live_eval.py --wrapper-only --public-artifact ../agent-coach-live-eval-public.json --wrapper-output ../agent-coach-live-wrapper.json
 ```
 
 The public artifact contains only bounded projections: case contract, executed

@@ -41,15 +41,17 @@ explicit approval for network access, environment-supplied provider credentials,
 the configured planner/synthesizer models and possible cost. Then run:
 
 ```bash
-python scripts/run_live_eval.py --allow-network --provider-opt-in --output docs/evidence/live-eval-public.json
+python scripts/run_live_eval.py --allow-network --provider-opt-in --output ../agent-coach-live-eval-public.json
 ```
 
-The committed public artifact must be redacted and must not contain raw
+The external public artifact must be redacted and must not contain raw
 provider payloads, credentials, private paths, learner data or chain-of-thought.
-After the reviewed commit exists, generate the external wrapper:
+Current live evidence is written outside the checkout; do not save it under
+`docs/evidence/`. After the reviewed commit exists, generate the external
+wrapper from that same external artifact:
 
 ```bash
-python scripts/run_live_eval.py --wrapper-only --public-artifact docs/evidence/live-eval-public.json --wrapper-output ../agent-coach-live-wrapper.json
+python scripts/run_live_eval.py --wrapper-only --public-artifact ../agent-coach-live-eval-public.json --wrapper-output ../agent-coach-live-wrapper.json
 ```
 
 Clean fresh-clone evidence is captured outside the checkout and must bind to

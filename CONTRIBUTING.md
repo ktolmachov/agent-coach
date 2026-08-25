@@ -12,6 +12,19 @@ Before opening a change:
 4. Run targeted tests, Ruff and compile checks for the touched surface.
 5. Stop after the promotion report instead of starting the next slice.
 
+On Windows PowerShell, prefer the active virtual environment interpreter:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest <relevant tests>
+.\.venv\Scripts\python.exe -m ruff check <touched paths>
+.\.venv\Scripts\python.exe -m compileall src scripts
+.\.venv\Scripts\python.exe scripts/check_d11_remediation_status.py
+```
+
+On POSIX shells, use the environment's `python` or `python3` consistently for
+the same commands. CI runs the offline eval gate without live evidence or
+promotion flags; live/provider evidence collection is a separate opt-in step.
+
 Use `docs/implementation_plan.md` as the source of truth for the current slice,
 its lifecycle status and its authorized write-set. Historical slice boundaries
 remain in force: foundation, contracts, Core, adapters, API, retrieval,

@@ -105,8 +105,8 @@ install/release checks are reserved for cross-cutting or release validation.
 
 ## Slice Ownership
 
-Slices D1 through D9 and their current status are defined only in
+Slices and their current status are defined only in
 `docs/implementation_plan.md`; do not duplicate or infer their status here.
 Preserve ownership boundaries when working in later slices, especially the
-Core/adapters/API separation. No production migration or D10 work begins
+Core/adapters/API separation. No production migration or next-slice work begins
 without an explicit approved slice.
