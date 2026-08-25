@@ -1,13 +1,13 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:58:16Z",
+  "updated_at_utc": "2026-08-25T17:29:43Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "a846c5d764cc2b68dfef8a5d5b86166b01299d4d",
-  "observed_head": "a1cfad735a54409a024902af15bcb667a3983195",
-  "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
+  "base_head": "49b28a7cd6264f5affe08d0a3671af32622449c4",
+  "observed_head": "49b28a7cd6264f5affe08d0a3671af32622449c4",
+  "observed_origin_main": "d764927d52430a4029e5bcbc02dab1cd43c22547",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "62f59480508e738c8dfb86008b604b0700036d3e876a02520ab2913dfaa3b559",
+  "checkpoint_fingerprint_sha256": "a1bec73860d3821791f056761448678d1d85b274d2addc446c43b3b444d05dd9",
   "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
@@ -377,6 +377,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "df0354decc05ee5f230a351802262b1290081159c892e3a304037771336bdc20",
       "entry_sha256": "6e1d78e88f08c6c8cf613380b1f51bbf69c3d5adca03e3b766c0ec7b7d53f65a"
+    },
+    {
+      "package": "E1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "49b28a7cd6264f5affe08d0a3671af32622449c4",
+      "completed_at_utc": "2026-08-25T17:29:43Z",
+      "evidence_summary": "Recorded corrective E1 checkpoint after prompt-only reviewed commit; E2 remains next and promotion HOLD.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "6e1d78e88f08c6c8cf613380b1f51bbf69c3d5adca03e3b766c0ec7b7d53f65a",
+      "entry_sha256": "1659f6b5007af89347736736a3c6aaa219010d9a1f6f8983a02f6d9896527b0c"
     }
   ]
 }
