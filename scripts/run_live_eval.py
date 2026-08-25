@@ -8,7 +8,6 @@ import json
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,10 +15,21 @@ from typing import Any
 from agent_coach.core.contracts import AgentRunResult
 from agent_coach.core.security import trace_text
 from agent_coach.eval.live_evidence import (
+    LIVE_EVAL_CASES,
     LIVE_EVAL_PUBLIC_PROVENANCE,
     LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
+    LIVE_EXECUTION_BACKEND,
+    SCRIPTED_EXECUTION_BACKEND,
+    LiveEvalCase,
+    bounded_live_eval_failure,
+    is_historical_live_eval_path,
+    is_historical_live_eval_payload,
+    live_eval_case_registry_hash,
+    live_eval_contract_hash,
+    live_eval_corpus_hash,
     load_live_eval_public_payload,
-    validate_live_eval_public_payload,
+    public_case_contract,
+    validate_current_live_eval_public_payload,
 )
 from agent_coach.profiles.live import build_live_composition
 from agent_coach.provider.config import (
@@ -48,146 +58,6 @@ WRAPPER_PROVENANCE = {
 }
 MIN_CASE_COUNT = 5
 PASS_THRESHOLD = 0.8
-
-
-@dataclass(frozen=True)
-class LiveEvalCase:
-    id: str
-    question: str
-    search_query: str
-    expected_tools: tuple[str, ...]
-    allowed_tools: tuple[str, ...]
-    forbidden_tools: tuple[str, ...]
-    expected_answer_status: str
-    allowed_sources: tuple[str, ...]
-    citation_required: bool
-    security_assertions: tuple[str, ...]
-    success_rule: str
-    scripted_answer: str
-
-
-LIVE_EVAL_CASES: tuple[LiveEvalCase, ...] = (
-    LiveEvalCase(
-        id="live-photosynthesis-grounded",
-        question="Explain how photosynthesis stores energy in glucose.",
-        search_query="photosynthesis energy glucose chlorophyll",
-        expected_tools=("rag.search",),
-        allowed_tools=("rag.search", "learner.get_profile"),
-        forbidden_tools=("quiz.generate", "cards.get_due", "catalog.list"),
-        expected_answer_status="grounded",
-        allowed_sources=("photosynthesis-basics.md",),
-        citation_required=True,
-        security_assertions=(
-            "no write tools",
-            "no raw provider payloads",
-            "no credentials or learner data",
-        ),
-        success_rule=(
-            "PASS when the run is grounded, cites an allowed source, executes "
-            "rag.search, executes no forbidden tools and has no security failures."
-        ),
-        scripted_answer=(
-            "Photosynthesis stores light energy as chemical energy in glucose "
-            "when chlorophyll captures photons for sugar production [1]."
-        ),
-    ),
-    LiveEvalCase(
-        id="live-spaced-repetition-grounded",
-        question="What does spaced repetition do with the forgetting curve?",
-        search_query="spaced repetition forgetting curve Leitner intervals",
-        expected_tools=("rag.search",),
-        allowed_tools=("rag.search", "learner.get_profile"),
-        forbidden_tools=("quiz.generate", "cards.get_due", "catalog.list"),
-        expected_answer_status="grounded",
-        allowed_sources=("spaced-repetition.md",),
-        citation_required=True,
-        security_assertions=(
-            "no write tools",
-            "no raw provider payloads",
-            "no credentials or learner data",
-        ),
-        success_rule=(
-            "PASS when the run is grounded, cites an allowed source, executes "
-            "rag.search, executes no forbidden tools and has no security failures."
-        ),
-        scripted_answer=(
-            "Spaced repetition schedules reviews along the forgetting curve and "
-            "lengthens Leitner intervals after successful recall [1]."
-        ),
-    ),
-    LiveEvalCase(
-        id="live-retrieval-practice-grounded",
-        question="Why does retrieval practice help memory?",
-        search_query="retrieval practice testing effect free recall memory",
-        expected_tools=("rag.search",),
-        allowed_tools=("rag.search", "learner.get_profile"),
-        forbidden_tools=("quiz.generate", "cards.get_due", "catalog.list"),
-        expected_answer_status="grounded",
-        allowed_sources=("retrieval-practice.md",),
-        citation_required=True,
-        security_assertions=(
-            "no write tools",
-            "no raw provider payloads",
-            "no credentials or learner data",
-        ),
-        success_rule=(
-            "PASS when the run is grounded, cites an allowed source, executes "
-            "rag.search, executes no forbidden tools and has no security failures."
-        ),
-        scripted_answer=(
-            "Retrieval practice strengthens memory by making the learner recall "
-            "facts instead of rereading them [1]."
-        ),
-    ),
-    LiveEvalCase(
-        id="live-active-recall-grounded",
-        question="How do active recall flashcards work?",
-        search_query="active recall flashcards cloze deletion card front back",
-        expected_tools=("rag.search",),
-        allowed_tools=("rag.search", "learner.get_profile"),
-        forbidden_tools=("quiz.generate", "cards.get_due", "catalog.list"),
-        expected_answer_status="grounded",
-        allowed_sources=("active-recall-flashcards.md",),
-        citation_required=True,
-        security_assertions=(
-            "no write tools",
-            "no raw provider payloads",
-            "no credentials or learner data",
-        ),
-        success_rule=(
-            "PASS when the run is grounded, cites an allowed source, executes "
-            "rag.search, executes no forbidden tools and has no security failures."
-        ),
-        scripted_answer=(
-            "Active recall flashcards make the learner produce an answer from "
-            "the prompt before revealing the back, including cloze prompts [1]."
-        ),
-    ),
-    LiveEvalCase(
-        id="live-cognitive-load-grounded",
-        question="Why should an explanation reduce extraneous cognitive load?",
-        search_query="working memory slots extraneous cognitive load explanations",
-        expected_tools=("rag.search",),
-        allowed_tools=("rag.search", "learner.get_profile"),
-        forbidden_tools=("quiz.generate", "cards.get_due", "catalog.list"),
-        expected_answer_status="grounded",
-        allowed_sources=("cognitive-load.md",),
-        citation_required=True,
-        security_assertions=(
-            "no write tools",
-            "no raw provider payloads",
-            "no credentials or learner data",
-        ),
-        success_rule=(
-            "PASS when the run is grounded, cites an allowed source, executes "
-            "rag.search, executes no forbidden tools and has no security failures."
-        ),
-        scripted_answer=(
-            "Explanations should reduce extraneous cognitive load because "
-            "working memory has limited slots; germane load supports schemas [1]."
-        ),
-    ),
-)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -227,7 +97,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--public-artifact",
         type=Path,
-        default=Path("docs/evidence/live-eval-public.json"),
         help="Existing public artifact used by --wrapper-only.",
     )
     return parser
@@ -237,8 +106,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     _configure_stdout()
     args = build_arg_parser().parse_args(argv)
     if args.wrapper_only:
-        if args.wrapper_output is None:
-            print("--wrapper-only requires --wrapper-output", file=sys.stderr)
+        if args.wrapper_output is None or args.public_artifact is None:
+            print(
+                "--wrapper-only requires --public-artifact and --wrapper-output",
+                file=sys.stderr,
+            )
             return 2
         return _write_wrapper_only(args.public_artifact, args.wrapper_output)
     if args.scripted and args.wrapper_output is not None:
@@ -250,17 +122,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    output_path = None if args.output is None else _absolute_repo_path(args.output)
+    if (
+        not args.scripted
+        and output_path is not None
+        and _output_is_inside_checkout(output_path)
+    ):
+        print(
+            "current live evidence must be written outside the checkout",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         artifact = run_live_eval(scripted=args.scripted)
     except LiveConfigurationError as exc:
         print(f"live configuration error: {trace_text(exc)}", file=sys.stderr)
         return 2
+    if not args.scripted:
+        evaluated_commit, clean_worktree = _git_provenance()
+        artifact["evaluated_commit"] = evaluated_commit
+        artifact["clean_worktree"] = clean_worktree
+        if evaluated_commit is None or clean_worktree is not True:
+            print("current live evidence requires a clean worktree", file=sys.stderr)
+            return 2
 
     encoded = json.dumps(artifact, indent=2, sort_keys=True) + "\n"
-    if args.output is not None:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(encoded, encoding="utf-8")
+    if output_path is not None and not _publish_evidence_file(
+        output_path, encoded, require_clean=not args.scripted
+    ):
+        print("current live evidence requires a clean worktree", file=sys.stderr)
+        return 2
     print(encoded, end="")
     return 0 if artifact["task_success_rate"] >= PASS_THRESHOLD else 1
 
@@ -271,11 +163,12 @@ def run_live_eval(*, scripted: bool = False) -> dict[str, Any]:
     if len(LIVE_EVAL_CASES) < MIN_CASE_COUNT:
         raise LiveConfigurationError("invalid_config", "at least five cases required")
     live_config = _scripted_config() if scripted else load_live_provider_config()
-    checked_at = _utc_now()
     results = [
         _run_case(case, scripted=scripted, config=live_config)
         for case in LIVE_EVAL_CASES
     ]
+    evaluated_commit, clean_worktree = _git_provenance()
+    checked_at = _utc_now()
     success_count = sum(1 for result in results if result["task_success"] is True)
     fallback_count = sum(1 for result in results if result["answer_fallback"] is True)
     abstain_count = sum(1 for result in results if result["answer_status"] == "abstain")
@@ -287,6 +180,7 @@ def run_live_eval(*, scripted: bool = False) -> dict[str, Any]:
             if isinstance(role, str)
         }
     )
+    safe_config = live_config.safe_projection()
     return {
         "schema_version": PUBLIC_SCHEMA_VERSION,
         "provenance": PUBLIC_PROVENANCE,
@@ -295,19 +189,31 @@ def run_live_eval(*, scripted: bool = False) -> dict[str, Any]:
         "mode": "scripted_provider_contract" if scripted else "live_provider",
         "contains_scripted_responses": scripted,
         "provider_profile_opt_in": not scripted,
+        "execution_backend": (
+            SCRIPTED_EXECUTION_BACKEND if scripted else LIVE_EXECUTION_BACKEND
+        ),
+        "evaluated_commit": evaluated_commit,
+        "clean_worktree": clean_worktree,
+        "contract_hash": live_eval_contract_hash(),
+        "corpus_hash": live_eval_corpus_hash(),
+        "case_registry_hash": live_eval_case_registry_hash(),
+        "model_projection": {
+            "planner": safe_config.get("planner"),
+            "synthesizer": safe_config.get("synthesizer"),
+        },
         "checked_at_utc": checked_at,
         "case_count": len(results),
         "task_success_rate": _rate(success_count, len(results)),
         "fallback_count": fallback_count,
         "abstain_count": abstain_count,
         "model_roles": model_roles,
-        "limits": _limits_from_config(live_config.safe_projection()),
+        "limits": _limits_from_config(safe_config),
         "pricing": {
             "cost_status": "unknown",
             "monetary_cap_usd": None,
             "note": "cloud pricing is intentionally recorded as unknown",
         },
-        "cases": [_case_public_contract(case) for case in LIVE_EVAL_CASES],
+        "cases": [public_case_contract(case) for case in LIVE_EVAL_CASES],
         "results": [_without_config(result) for result in results],
     }
 
@@ -432,21 +338,6 @@ def _result_projection(case: LiveEvalCase, result: AgentRunResult) -> dict[str, 
                 name for name in tool_calls if name in case.forbidden_tools
             ],
         },
-    }
-
-
-def _case_public_contract(case: LiveEvalCase) -> dict[str, Any]:
-    return {
-        "id": case.id,
-        "question": case.question,
-        "expected_tools": list(case.expected_tools),
-        "allowed_tools": list(case.allowed_tools),
-        "forbidden_tools": list(case.forbidden_tools),
-        "expected_answer_status": case.expected_answer_status,
-        "allowed_sources": list(case.allowed_sources),
-        "citation_required": case.citation_required,
-        "security_assertions": list(case.security_assertions),
-        "success_rule": case.success_rule,
     }
 
 
@@ -579,24 +470,60 @@ def _scripted_client(case: LiveEvalCase) -> ScriptedResponsesClient:
 
 
 def _write_wrapper_only(public_artifact: Path, wrapper_output: Path) -> int:
-    artifact_path = _resolve_repo_path(public_artifact)
+    artifact_path = _absolute_repo_path(public_artifact)
+    wrapper_path = _absolute_repo_path(wrapper_output)
+    label = _public_artifact_label(artifact_path)
+    if label is not None and is_historical_live_eval_path(label):
+        print("historical example is not current live evidence", file=sys.stderr)
+        return 2
+    if _output_is_inside_checkout(artifact_path) or _output_is_inside_checkout(
+        wrapper_path
+    ):
+        print(
+            "current live evidence must be written outside the checkout",
+            file=sys.stderr,
+        )
+        return 2
+    if label is None:
+        print("public artifact path is not an allowed live JSON file", file=sys.stderr)
+        return 2
     try:
         payload = load_live_eval_public_payload(artifact_path)
     except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
-        print(f"cannot read public artifact: {trace_text(exc)}", file=sys.stderr)
+        detail = bounded_live_eval_failure((trace_text(exc),))
+        print(f"cannot read public artifact: {detail}", file=sys.stderr)
         return 2
-    failures = validate_live_eval_public_payload(payload, require_threshold=False)
+    if is_historical_live_eval_payload(payload):
+        print("historical example is not current live evidence", file=sys.stderr)
+        return 2
+    try:
+        expected_commit = _git_commit()
+    except (OSError, subprocess.CalledProcessError, subprocess.SubprocessError):
+        expected_commit = None
+    failures = validate_current_live_eval_public_payload(
+        payload,
+        require_threshold=False,
+        expected_commit=expected_commit,
+        path=label,
+    )
+    if expected_commit is None:
+        failures.append("live eval evaluated_commit does not match expected commit")
+    try:
+        worktree_clean = _git_worktree_clean()
+    except (OSError, subprocess.CalledProcessError, subprocess.SubprocessError):
+        worktree_clean = False
+    if worktree_clean is not True:
+        failures.append("current live evidence requires a clean worktree")
     if failures:
-        print(f"invalid public artifact: {failures[0]}", file=sys.stderr)
-        return 2
-    label = _repo_relative_label(artifact_path)
-    if label is None:
-        print("public artifact must be under docs/evidence/*.json", file=sys.stderr)
+        print(
+            f"invalid public artifact: {bounded_live_eval_failure(failures)}",
+            file=sys.stderr,
+        )
         return 2
     wrapper = {
         "schema_version": WRAPPER_SCHEMA_VERSION,
         "provenance": WRAPPER_PROVENANCE,
-        "commit": _git_commit(),
+        "commit": payload.get("evaluated_commit"),
         "profile": "live_provider",
         "provider_profile_opt_in": True,
         "checked_at_utc": _utc_now(),
@@ -610,10 +537,39 @@ def _write_wrapper_only(public_artifact: Path, wrapper_output: Path) -> int:
         ],
     }
     encoded = json.dumps(wrapper, indent=2, sort_keys=True) + "\n"
-    wrapper_output.parent.mkdir(parents=True, exist_ok=True)
-    wrapper_output.write_text(encoded, encoding="utf-8")
+    if not _publish_evidence_file(wrapper_path, encoded, require_clean=True):
+        print("current live evidence requires a clean worktree", file=sys.stderr)
+        return 2
     print(encoded, end="")
     return 0
+
+
+def _publish_evidence_file(
+    path: Path, encoded: str, *, require_clean: bool
+) -> bool:
+    path = _absolute_repo_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(f"{path.name}.partial")
+    published = False
+    try:
+        partial.write_text(encoded, encoding="utf-8")
+        if require_clean:
+            try:
+                still_clean = _git_worktree_clean()
+            except (
+                OSError,
+                subprocess.CalledProcessError,
+                subprocess.SubprocessError,
+            ):
+                still_clean = False
+            if still_clean is not True:
+                return False
+        partial.replace(path)
+        published = True
+    finally:
+        if not published:
+            partial.unlink(missing_ok=True)
+    return published
 
 
 def _resolve_repo_path(path: Path) -> Path:
@@ -622,14 +578,31 @@ def _resolve_repo_path(path: Path) -> Path:
     return REPO_ROOT / path
 
 
-def _repo_relative_label(path: Path) -> str | None:
+def _absolute_repo_path(path: Path) -> Path:
+    return _resolve_repo_path(path).resolve()
+
+
+def _output_is_inside_checkout(path: Path) -> bool:
+    try:
+        _absolute_repo_path(path).relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _public_artifact_label(path: Path) -> str | None:
     try:
         relative = path.resolve().relative_to(REPO_ROOT.resolve())
     except ValueError:
+        if path.suffix != ".json" or not path.name or "/" in path.name:
+            return None
+        return path.name
+    if relative.suffix != ".json" or relative.is_absolute() or ".." in relative.parts:
         return None
-    if relative.parts[:2] != ("docs", "evidence") or relative.suffix != ".json":
-        return None
-    return "/".join(relative.parts)
+    label = "/".join(relative.parts)
+    if is_historical_live_eval_path(label):
+        return label
+    return None
 
 
 def _sha256_file(path: Path) -> str:
@@ -643,6 +616,30 @@ def _git_commit() -> str:
         stderr=subprocess.DEVNULL,
         text=True,
     ).strip()
+
+
+def _git_worktree_clean() -> bool:
+    output = subprocess.check_output(
+        ["git", "status", "--porcelain"],
+        cwd=REPO_ROOT,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    return output.strip() == ""
+
+
+def _git_provenance() -> tuple[str | None, bool]:
+    try:
+        commit = _git_commit()
+    except (OSError, subprocess.CalledProcessError):
+        return None, False
+    if not commit:
+        return None, False
+    try:
+        clean = _git_worktree_clean()
+    except (OSError, subprocess.CalledProcessError):
+        return commit, False
+    return commit, clean
 
 
 def _utc_now() -> str:

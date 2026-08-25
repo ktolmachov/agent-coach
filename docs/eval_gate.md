@@ -132,23 +132,26 @@ python scripts/run_live_eval.py --scripted
 Live collection requires explicit provider and network opt-in:
 
 ```bash
-python scripts/run_live_eval.py --allow-network --provider-opt-in --output docs/evidence/live-eval-public.json
+python scripts/run_live_eval.py --allow-network --provider-opt-in --output ../agent-coach-live-eval-public.json
 ```
 
-The public artifact is a bounded redacted projection. The release gate rejects
-scripted mode, missing or empty per-case results, security/tool violations and
-self-reported success rates that do not match the case results. After it is
-committed in the reviewed tree, generate the external wrapper for the final eval
-gate:
+The public artifact is a bounded redacted projection. The current-evidence
+validator rejects scripted mode, missing causal provenance, dirty or
+mismatched commits, missing or empty per-case results, security/tool
+violations and self-reported success rates that do not match the case results.
+Tracked `docs/evidence/historical/live-eval-public.json` is a
+`historical_example` and cannot be wrapped as current evidence. After a
+current public artifact is written outside the checkout, generate the
+external wrapper for the final eval gate:
 
 ```bash
-python scripts/run_live_eval.py --wrapper-only --public-artifact docs/evidence/live-eval-public.json --wrapper-output ../agent-coach-live-wrapper.json
+python scripts/run_live_eval.py --wrapper-only --public-artifact ../agent-coach-live-eval-public.json --wrapper-output ../agent-coach-live-wrapper.json
 ```
 
-The wrapper records the current Git commit and the SHA-256 of the committed
-public artifact. Wrapper-only mode validates the public artifact before writing
-the wrapper, so a scripted validation artifact cannot be converted into live
-promotion evidence.
+The wrapper records the artifact `evaluated_commit` and the SHA-256 of the
+public artifact. Wrapper-only mode validates the current causal contract
+before writing the wrapper, so a scripted validation artifact or historical
+example cannot be converted into live promotion evidence.
 
 ## Tool SOP
 

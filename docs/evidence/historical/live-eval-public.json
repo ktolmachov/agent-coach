@@ -141,6 +141,7 @@
   "checked_at_utc": "2026-08-24T18:30:00Z",
   "contains_scripted_responses": false,
   "fallback_count": 0,
+  "historical_evaluated_commit": "829df29e58f6dd48fb09ee1400dec3c4115ad6b9",
   "limits": {
     "cost_cap_usd": 0.0,
     "max_output_tokens": 400,
@@ -163,7 +164,7 @@
   },
   "profile": "live_provider",
   "provenance": {
-    "classification": "redacted_live_provider_eval_public",
+    "classification": "historical_example",
     "contains_credentials": false,
     "contains_hometutor_runtime_dependency": false,
     "contains_learner_data": false,

@@ -17,8 +17,11 @@ from agent_coach.core.security import trace_text
 from agent_coach.eval import build_tool_sop_markdown, load_eval_suite
 from agent_coach.eval.live_evidence import (
     LIVE_EVAL_PUBLIC_SCHEMA_VERSION,
+    is_historical_live_eval_path,
+    is_historical_live_eval_payload,
     load_live_eval_public_payload,
-    validate_live_eval_public_payload,
+    validate_current_live_eval_public_payload,
+    validate_historical_live_eval_public_payload,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -453,6 +456,8 @@ def _check_evidence_artifacts(repo_root: Path, files: Iterable[Path]) -> list[st
     for path in files:
         if path.parts[:2] != ("docs", "evidence") or path.suffix != ".json":
             continue
+        if not (repo_root / path).is_file():
+            continue
         try:
             if path.name == "live-eval-public.json":
                 payload = load_live_eval_public_payload(repo_root / path)
@@ -480,7 +485,7 @@ def _validate_evidence_payload(
     if not isinstance(payload, dict):
         return [f"release evidence must be a JSON object: {display_path}"]
     if payload.get("schema_version") == LIVE_EVAL_PUBLIC_SCHEMA_VERSION:
-        return _validate_live_eval_public_payload(path, payload)
+        return _validate_live_eval_public_payload(path, payload, head)
     failures = []
     if payload.get("schema_version") != EVIDENCE_SCHEMA_VERSION:
         failures.append(f"unexpected release evidence schema in {display_path}")
@@ -505,11 +510,27 @@ def _validate_evidence_payload(
 
 
 def _validate_live_eval_public_payload(
-    path: Path, payload: dict[str, Any]
+    path: Path, payload: dict[str, Any], head: str
 ) -> list[str]:
+    display_path = _display_path(path)
+    historical_path = is_historical_live_eval_path(path)
+    historical_payload = is_historical_live_eval_payload(payload)
+    if historical_path != historical_payload:
+        return [
+            "historical live example path and classification mismatch: "
+            f"{display_path}"
+        ]
+    if historical_path and historical_payload:
+        return [
+            f"{failure}: {display_path}"
+            for failure in validate_historical_live_eval_public_payload(payload)
+        ]
     return [
-        f"{failure}: {_display_path(path)}"
-        for failure in validate_live_eval_public_payload(payload)
+        f"{failure}: {display_path}"
+        for failure in validate_current_live_eval_public_payload(
+            payload,
+            expected_commit=head,
+        )
     ]
 
 
@@ -534,7 +555,6 @@ def _check_strict_release_git_state(repo_root: Path) -> list[str]:
 def _check_strict_d11_release_artifacts(repo_root: Path) -> list[str]:
     required = [
         "docs/prompts/architecture_review_prompt.md",
-        "docs/evidence/live-eval-public.json",
     ]
     return [
         f"strict release artifact is missing: {path}"
@@ -616,7 +636,7 @@ def _release_files(repo_root: Path) -> Iterable[Path]:
 def _read_text_or_none(path: Path) -> str | None:
     try:
         return path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
+    except (OSError, UnicodeDecodeError):
         return None
 
 

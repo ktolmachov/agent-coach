@@ -164,7 +164,7 @@ or evidence files.
 The D11 live eval runner requires explicit CLI opt-in:
 
 ```bash
-python scripts/run_live_eval.py --allow-network --provider-opt-in --output docs/evidence/live-eval-public.json
+python scripts/run_live_eval.py --allow-network --provider-opt-in --output ../agent-coach-live-eval-public.json
 ```
 
 Scripted validation of the runner is offline and is not live evidence:

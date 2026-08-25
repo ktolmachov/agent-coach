@@ -1,35 +1,65 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T15:52:34Z",
+  "updated_at_utc": "2026-08-25T16:01:42Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
-  "observed_head": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
+  "base_head": "bf6ae6e9ec3449953ea802e744e5b2964c2d2941",
+  "observed_head": "bf6ae6e9ec3449953ea802e744e5b2964c2d2941",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "5d199e3339537cc64793faa317bfb02a033845ad73b8db5a1948af8e45fb5369",
+  "checkpoint_fingerprint_sha256": "596b1a87248b3f1a8bb749579200851d629b697c1a2c82bcb5e127db4176bda9",
   "fingerprinted_files": [
     {
-      "path": "docs/prompts/d11_remediation_implementation_prompt.md",
-      "sha256": "5a13f943b8a008211ab56d9011324984a5b1ca2d6f52168c78e0bbdff94541ce",
+      "path": "README.md",
+      "sha256": "9aa377d78c87b3cbf5379f151dc442a3057b3bd86ae8ee5c36dee056095c9215",
       "state": "MODIFY"
     },
     {
-      "path": "scripts/check_d11_remediation_status.py",
-      "sha256": "37315872f79e41ec203ddfc5dbb740b62e5720d6d43c8b40df3c73397768868c",
+      "path": "docs/eval_gate.md",
+      "sha256": "842cdb62fc8c1a3f63e262e64ed0a66cbc7d9cb0ee93cb635de0801df1fd7915",
       "state": "MODIFY"
     },
     {
-      "path": "tests/test_d11_remediation_status.py",
-      "sha256": "f228891370fbaee0a8bf940aafc264fadd7e5e379ca1514de65ae1e5181e0d90",
+      "path": "docs/evidence/historical/live-eval-public.json",
+      "sha256": "1acc070b6918efbd7d359a6157512efd3adf5b506007d1f970c319a5c91930c7",
+      "state": "ADD"
+    },
+    {
+      "path": "docs/evidence/live-eval-public.json",
+      "sha256": "293ec69a98eba4fc7c32dae4a91a19c96dd71beff16f833158d4a3275f9676a6",
+      "state": "DELETE"
+    },
+    {
+      "path": "scripts/check_public_release.py",
+      "sha256": "e06f1cea5d5c603229441b88729098e72165ae81142ff17830a282eb920cc7b9",
+      "state": "MODIFY"
+    },
+    {
+      "path": "scripts/run_live_eval.py",
+      "sha256": "0d516064164843a3942672272041d8d35978ad6bf12ebff62631e3afdb8b2d9a",
+      "state": "MODIFY"
+    },
+    {
+      "path": "src/agent_coach/eval/live_evidence.py",
+      "sha256": "5e7f02dd1f795dbb7019f4a0bbfa43381cf707763894ee26f14deca11424fec0",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_live_eval_runner.py",
+      "sha256": "adf88960f1eb5847e7c24b8899bf45f6217885d573e844a87d907722c382e785",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_public_release_gate.py",
+      "sha256": "bc7547807826c0d1ab40863a8641c02136e6a12442c401ca8fe16a5d9d73777d",
       "state": "MODIFY"
     }
   ],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T15:24:10Z",
+  "session_started_at_utc": "2026-08-25T16:00:47Z",
   "lease_status": "RELEASED",
-  "current_package": "A",
+  "current_package": "B1",
   "implementation_status": "COMPLETE",
   "package_verdict": "PASS",
   "d11_promotion_status": "HOLD",
@@ -37,60 +67,66 @@
   "provider_cost_status": "zero",
   "changed_files": [
     {
+      "path": "README.md",
+      "purpose": "Document external current live evidence output path.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "docs/eval_gate.md",
+      "purpose": "Document causal current live evidence and historical example separation.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "docs/evidence/historical/live-eval-public.json",
+      "purpose": "Track historical live artifact as historical_example only.",
+      "state": "ADD"
+    },
+    {
+      "path": "docs/evidence/live-eval-public.json",
+      "purpose": "Remove ambiguous current tracked live artifact from promotion path.",
+      "state": "DELETE"
+    },
+    {
+      "path": "scripts/check_public_release.py",
+      "purpose": "Validate current and historical live evidence contracts separately.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "scripts/run_live_eval.py",
+      "purpose": "Use canonical registry, causal provenance, and safe external output guards.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "src/agent_coach/eval/live_evidence.py",
+      "purpose": "Define canonical live registry/hash and current/historical public evidence validators.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_live_eval_runner.py",
+      "purpose": "Cover B1 live registry, provenance, path guard, and post-check failure behavior.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_public_release_gate.py",
+      "purpose": "Cover B1 public release handling for current and historical evidence.",
+      "state": "MODIFY"
+    },
+    {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package A audit-remediation READY_TO_COMMIT checkpoint.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/prompts/d11_remediation_implementation_prompt.md",
-      "purpose": "Package A audit-remediation validator hardening.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "scripts/check_d11_remediation_status.py",
-      "purpose": "Package A audit-remediation validator hardening.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_d11_remediation_status.py",
-      "purpose": "Package A audit-remediation validator hardening.",
+      "purpose": "Record Package B1 COMPLETE+PASS READY_TO_COMMIT checkpoint.",
       "state": "MODIFY"
     }
   ],
   "checks_passed": [
     {
-      "id": "acceptance_suite",
-      "command": "python -m pytest tests/test_acceptance_demo.py -p no:cacheprovider",
+      "id": "live_registry_suite",
+      "command": "python -m pytest tests/test_live_eval_runner.py tests/test_public_release_gate.py -p no:cacheprovider",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
-      "id": "status_validator_suite",
-      "command": "python -m pytest tests/test_d11_remediation_status.py -p no:cacheprovider",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "status_validator_cli",
-      "command": "python scripts/check_d11_remediation_status.py",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "localhost_acceptance_repeats",
-      "command": "python -m pytest tests/test_acceptance_demo.py::test_live_localhost_api_acceptance_smoke -p no:cacheprovider (10/10)",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "ruff_touched_python",
-      "command": "python -m ruff check scripts/check_d11_remediation_status.py tests/test_d11_remediation_status.py",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "compileall_touched_python",
-      "command": "python -m compileall -q scripts/check_d11_remediation_status.py tests/test_d11_remediation_status.py",
+      "id": "historical_classification_suite",
+      "command": "python -m pytest tests/test_live_eval_runner.py tests/test_public_release_gate.py -p no:cacheprovider",
       "platform": "win32/Windows",
       "result": "PASS"
     },
@@ -101,20 +137,26 @@
       "result": "PASS"
     },
     {
+      "id": "ruff_touched_python",
+      "command": "python -m ruff check src/agent_coach/eval/live_evidence.py scripts/run_live_eval.py scripts/check_public_release.py tests/test_live_eval_runner.py tests/test_public_release_gate.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "compileall_touched_python",
+      "command": "python -m compileall -q src/agent_coach/eval/live_evidence.py scripts/run_live_eval.py scripts/check_public_release.py tests/test_live_eval_runner.py tests/test_public_release_gate.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "status_validator_cli",
+      "command": "python scripts/check_d11_remediation_status.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
       "id": "git_diff_check",
       "command": "git diff --check",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "commit_resume_lifecycle",
-      "command": "python -m pytest tests/test_d11_remediation_status.py::test_package_a_ready_to_commit_survives_clean_commit_without_rewrite -p no:cacheprovider",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "e1_e2_clean_promotion_lifecycle",
-      "command": "python -m pytest tests/test_d11_remediation_status.py::test_clean_e1_ready_to_commit_then_e2_handoff_from_disk -p no:cacheprovider",
       "platform": "win32/Windows",
       "result": "PASS"
     }
@@ -126,16 +168,14 @@
     "d11_promotion_gate"
   ],
   "remaining_risks": [
-    "This audit-remediation checkpoint is not yet committed and must be validated again on clean HEAD before B1 resumes.",
-    "B1 remains HOLD in stash d11-b1-c2-isolation-after-output-path-fix until an explicit B1 resume.",
-    "R-16 remains deferred to C2 for non-acceptance bare python commands.",
-    "Windows localhost acceptance flake is not claimed eliminated.",
-    "D11 promotion remains HOLD."
+    "D11 promotion remains HOLD pending E2 live and clean-release evidence.",
+    "No provider network or live evidence was run in B1.",
+    "docs/release_checklist.md C2 wording remains deferred because it is outside the B1 validator write-set."
   ],
   "blockers": [],
-  "last_completed_package": "A",
-  "next_allowed_package": "B1",
-  "exact_resume_instruction": "Commit this A audit-remediation READY_TO_COMMIT snapshot locally, verify scripts/check_d11_remediation_status.py on clean HEAD, then restore stash d11-b1-c2-isolation-after-output-path-fix only for an explicit B1 resume. Do not start B2. Keep AUTONOMOUS_LIVE_POLICY=DOCUMENTED_LIMITATION.",
+  "last_completed_package": "B1",
+  "next_allowed_package": "B2",
+  "exact_resume_instruction": "On clean HEAD after committing this B1 READY_TO_COMMIT snapshot, verify scripts/check_d11_remediation_status.py, then start Package B2. Do not run provider network or E2 live evidence.",
   "package_ledger": [
     {
       "package": "A",
@@ -213,6 +253,28 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "a5e3772f83e0577f1de2bda9d8fb596ec3a4121b187ce76f17257c8f1eb73b73",
       "entry_sha256": "4e2e6236d7994574ff2bc95d5f490c08ad268bc4dc3ce3f4489460a54a9cf4bb"
+    },
+    {
+      "package": "B1",
+      "status": "IN_PROGRESS",
+      "verdict": "HOLD",
+      "observed_head": "bf6ae6e9ec3449953ea802e744e5b2964c2d2941",
+      "completed_at_utc": "2026-08-25T16:00:47Z",
+      "evidence_summary": "Acquired B1 lease after restoring causal live-evidence stash; focused checks not complete yet.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "4e2e6236d7994574ff2bc95d5f490c08ad268bc4dc3ce3f4489460a54a9cf4bb",
+      "entry_sha256": "30766955014fd24459c7cae7c26e9f9f38901c5826ee9534643b6a883070d427"
+    },
+    {
+      "package": "B1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "bf6ae6e9ec3449953ea802e744e5b2964c2d2941",
+      "completed_at_utc": "2026-08-25T16:01:42Z",
+      "evidence_summary": "Completed B1 causal live-evidence harness: canonical registry/hash, current causal artifact schema, historical example classification, external path guards, and release checks.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "30766955014fd24459c7cae7c26e9f9f38901c5826ee9534643b6a883070d427",
+      "entry_sha256": "9d98cf5cb3c01c172ed153f1a20b56e18a37585543b875c22a344afa56ccb68e"
     }
   ]
 }

@@ -9,6 +9,14 @@ from scripts import check_public_release as gate
 from scripts import run_live_eval
 
 from agent_coach.api import create_app
+from agent_coach.eval.live_evidence import (
+    LIVE_EXECUTION_BACKEND,
+    UNEXPECTED_PUBLIC_FIELD_FAILURE,
+    UNSAFE_PUBLIC_VALUE_FAILURE,
+    live_eval_case_registry_hash,
+    live_eval_contract_hash,
+    live_eval_corpus_hash,
+)
 
 
 def test_public_release_gate_passes() -> None:
@@ -26,7 +34,7 @@ def test_public_release_gate_has_help_and_release_mode(
     assert "--release" in captured.out
 
 
-def test_strict_release_mode_rejects_dirty_tree_and_missing_live_artifact(
+def test_strict_release_mode_rejects_dirty_tree_without_requiring_live_artifact(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -53,18 +61,19 @@ def test_strict_release_mode_rejects_dirty_tree_and_missing_live_artifact(
     assert "strict release mode requires a clean worktree" in failures
     assert (
         "strict release artifact is missing: docs/evidence/live-eval-public.json"
-        in failures
+        not in failures
     )
 
 
 def test_live_eval_public_evidence_schema_is_validated() -> None:
     payload = _valid_live_public_payload()
+    head = str(payload["evaluated_commit"])
 
     assert (
         gate._validate_evidence_payload(
             Path("docs/evidence/live-eval-public.json"),
             payload,
-            "head",
+            head,
         )
         == []
     )
@@ -76,7 +85,7 @@ def test_live_eval_public_evidence_schema_is_validated() -> None:
     ) in gate._validate_evidence_payload(
         Path("docs/evidence/live-eval-public.json"),
         payload,
-        "head",
+        head,
     )
 
     payload = _valid_live_public_payload()
@@ -85,7 +94,7 @@ def test_live_eval_public_evidence_schema_is_validated() -> None:
     failures = gate._validate_evidence_payload(
         Path("docs/evidence/live-eval-public.json"),
         payload,
-        "head",
+        head,
     )
 
     assert any(
@@ -107,7 +116,7 @@ def test_live_eval_public_case_contract_freezes_review_fields() -> None:
     failures = gate._validate_evidence_payload(
         Path("docs/evidence/live-eval-public.json"),
         payload,
-        "head",
+        str(payload["evaluated_commit"]),
     )
 
     assert any("live eval case question mismatch" in item for item in failures)
@@ -118,7 +127,7 @@ def test_live_eval_public_case_contract_freezes_review_fields() -> None:
     assert gate._validate_evidence_payload(
         Path("docs/evidence/live-eval-public.json"),
         unchanged,
-        "head",
+        str(unchanged["evaluated_commit"]),
     ) == []
 
 
@@ -491,9 +500,117 @@ def _init_git(root: Path) -> None:
     )
 
 
+def test_historical_live_example_is_not_current_and_skips_head_match() -> None:
+    payload = _historical_live_public_payload()
+    path = Path("docs/evidence/historical/live-eval-public.json")
+
+    assert gate._validate_evidence_payload(path, payload, "other-head") == []
+
+
+def test_historical_payload_on_current_path_is_rejected() -> None:
+    payload = _historical_live_public_payload()
+    failures = gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        payload,
+        "other-head",
+    )
+    assert any(
+        "path and classification mismatch" in item for item in failures
+    )
+
+
+def test_current_payload_on_historical_path_is_rejected() -> None:
+    payload = _valid_live_public_payload()
+    failures = gate._validate_evidence_payload(
+        Path("docs/evidence/historical/live-eval-public.json"),
+        payload,
+        str(payload["evaluated_commit"]),
+    )
+    assert any(
+        "path and classification mismatch" in item for item in failures
+    )
+
+
+def test_current_live_evidence_must_match_release_head() -> None:
+    payload = _valid_live_public_payload()
+    failures = gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        payload,
+        "ffffffffffffffffffffffffffffffffffffffff",
+    )
+    assert any("does not match expected commit" in item for item in failures)
+
+
+def test_current_live_evidence_rejects_unexpected_fields() -> None:
+    payload = _valid_live_public_payload()
+    payload["raw_provider_payload"] = {"note": "not-in-schema"}
+    failures = gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        payload,
+        str(payload["evaluated_commit"]),
+    )
+    assert any(UNEXPECTED_PUBLIC_FIELD_FAILURE in item for item in failures)
+
+    nested = _valid_live_public_payload()
+    nested["results"][0]["raw_provider_payload"] = {"note": "not-in-schema"}
+    nested_failures = gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        nested,
+        str(nested["evaluated_commit"]),
+    )
+    assert any(UNEXPECTED_PUBLIC_FIELD_FAILURE in item for item in nested_failures)
+
+
+def test_current_live_evidence_rejects_secret_in_allowed_backend() -> None:
+    payload = _valid_live_public_payload()
+    payload["model_projection"]["planner"]["backend"] = "sk-proj-EXAMPLE"
+    failures = gate._validate_evidence_payload(
+        Path("docs/evidence/live-eval-public.json"),
+        payload,
+        str(payload["evaluated_commit"]),
+    )
+    assert any(UNSAFE_PUBLIC_VALUE_FAILURE in item for item in failures)
+
+
 def _valid_live_public_payload() -> dict[str, object]:
     payload = run_live_eval.run_live_eval(scripted=True)
     payload["mode"] = "live_provider"
     payload["contains_scripted_responses"] = False
     payload["provider_profile_opt_in"] = True
+    payload["execution_backend"] = LIVE_EXECUTION_BACKEND
+    payload["evaluated_commit"] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    payload["clean_worktree"] = True
+    payload["contract_hash"] = live_eval_contract_hash()
+    payload["corpus_hash"] = live_eval_corpus_hash()
+    payload["case_registry_hash"] = live_eval_case_registry_hash()
+    payload["model_projection"] = {
+        "planner": {
+            "role": "planner",
+            "model_id": "gpt-4.1-mini",
+            "backend": "openai_responses",
+        },
+        "synthesizer": {
+            "role": "synthesizer",
+            "model_id": "gpt-4.1",
+            "backend": "openai_responses",
+        },
+    }
+    return payload
+
+
+def _historical_live_public_payload() -> dict[str, object]:
+    payload = run_live_eval.run_live_eval(scripted=True)
+    payload["mode"] = "live_provider"
+    payload["contains_scripted_responses"] = False
+    payload["provider_profile_opt_in"] = True
+    payload["historical_evaluated_commit"] = (
+        "829df29e58f6dd48fb09ee1400dec3c4115ad6b9"
+    )
+    payload["provenance"] = {
+        "classification": "historical_example",
+        "contains_credentials": False,
+        "contains_learner_data": False,
+        "contains_hometutor_runtime_dependency": False,
+        "contains_raw_provider_payloads": False,
+    }
     return payload
