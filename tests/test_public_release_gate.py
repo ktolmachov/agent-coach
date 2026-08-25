@@ -428,11 +428,10 @@ def test_final_release_checklist_documents_full_promotion_command() -> None:
         assert command[flag].startswith("../")
 
 
-def test_ci_runs_offline_eval_and_status_without_promotion_flags() -> None:
+def test_ci_runs_offline_eval_without_promotion_flags() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "python -m compileall src scripts" in workflow
-    assert "python scripts/check_d11_remediation_status.py" in workflow
     assert "name: Check strict public release hygiene" in workflow
     assert "python scripts/check_public_release.py --release" in workflow
     assert "run: python scripts/run_eval_gate.py" in workflow

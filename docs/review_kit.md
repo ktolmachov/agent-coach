@@ -281,7 +281,6 @@ Run the full public check sequence on Windows PowerShell:
 .\.venv\Scripts\python.exe scripts/check_openapi_snapshot.py
 .\.venv\Scripts\python.exe scripts/check_drift_gate.py
 .\.venv\Scripts\python.exe scripts/check_public_release.py
-.\.venv\Scripts\python.exe scripts/check_d11_remediation_status.py
 .\.venv\Scripts\python.exe scripts/run_eval_gate.py
 ```
 
@@ -295,7 +294,6 @@ python scripts/check_contract_export.py
 python scripts/check_openapi_snapshot.py
 python scripts/check_drift_gate.py
 python scripts/check_public_release.py
-python scripts/check_d11_remediation_status.py
 python scripts/run_eval_gate.py
 ```
 

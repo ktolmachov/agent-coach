@@ -18,7 +18,6 @@ On Windows PowerShell, prefer the active virtual environment interpreter:
 .\.venv\Scripts\python.exe -m pytest <relevant tests>
 .\.venv\Scripts\python.exe -m ruff check <touched paths>
 .\.venv\Scripts\python.exe -m compileall src scripts
-.\.venv\Scripts\python.exe scripts/check_d11_remediation_status.py
 ```
 
 On POSIX shells, use the environment's `python` or `python3` consistently for

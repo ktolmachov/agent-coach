@@ -190,7 +190,6 @@ python scripts/check_contract_export.py
 python scripts/check_openapi_snapshot.py
 python scripts/check_drift_gate.py
 python scripts/check_public_release.py
-python scripts/check_d11_remediation_status.py
 python scripts/run_eval_gate.py
 ```
 

@@ -778,7 +778,6 @@ Write-set:
 - opt-in live eval runner and focused scripted-runner tests;
 - generated Tool SOP and drift check;
 - published acceptance demo runner, focused tests and supported command docs;
-- D11 remediation status ledger and offline status validator;
 - review-kit, README, scripts and implementation-plan documentation updates;
 - public release gate awareness for D11 eval/SOP artifacts.
 
@@ -795,10 +794,6 @@ Implemented artifacts:
 - `docs/prompts/architecture_review_prompt.md`;
 - `scripts/run_acceptance_demo.py`;
 - `tests/test_acceptance_demo.py`;
-- `docs/d11_remediation_status.json`;
-- `scripts/check_d11_remediation_status.py`;
-- `tests/test_d11_remediation_status.py`;
-- `docs/prompts/d11_remediation_implementation_prompt.md`;
 - D11 documentation updates in `README.md`, `docs/review_kit.md`,
   `scripts/README.md` and this implementation plan;
 - public release gate checks for eval-suite validity, generated Tool SOP drift,
@@ -917,7 +912,7 @@ Rollback:
 
 - remove the D11 eval package, packaged eval suite, eval script, eval tests,
   generated SOP, acceptance-demo runner, acceptance tests, acceptance command
-  docs, D11 remediation status ledger/validator and D11 documentation updates;
+  docs and D11 documentation updates;
   keep D1-D10 intact.
 
 Stop:
