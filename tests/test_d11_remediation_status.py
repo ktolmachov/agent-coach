@@ -16,6 +16,34 @@ FILE_SHA = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 UTC = "2026-08-25T08:15:00Z"
 
 
+def test_changed_files_must_match_fingerprint_and_status() -> None:
+    payload = _complete_package_a()
+    payload["changed_files"] = payload["changed_files"][:1]
+
+    failures = status.validate_status(payload)
+
+    assert "changed_files do not match fingerprinted_files" in failures
+
+    missing_status = _complete_package_a()
+    missing_status["changed_files"] = [
+        item
+        for item in missing_status["changed_files"]
+        if item["path"] != status.STATUS_FILE
+    ]
+    missing_failures = status.validate_status(missing_status)
+
+    assert "changed_files must include STATUS_FILE" in missing_failures
+
+
+def test_promotion_pass_without_git_repo_fails(tmp_path: Path) -> None:
+    payload = _promotion_pass_handoff()
+    _write_handoff_artifacts(tmp_path, payload)
+
+    failures = status.validate_status(payload, handoff=True, artifact_dir=tmp_path)
+
+    assert "promotion PASS requires git repository" in failures
+
+
 def test_complete_pass_for_package_a_allows_only_b1() -> None:
     payload = _complete_package_a()
 
@@ -260,15 +288,22 @@ def test_autonomous_public_without_wrapper_fails() -> None:
     assert "handoff artifact public/wrapper pair is incomplete" in failures
 
 
-def test_handoff_verifies_size_and_digest(tmp_path: Path) -> None:
-    payload = _valid_e2_handoff()
+def test_handoff_filler_bytes_are_not_promotion_evidence(tmp_path: Path) -> None:
+    payload = _promotion_pass_handoff()
     for item in payload["artifacts"]:
         data = b"x" * int(item["size_bytes"])
         item["sha256"] = hashlib.sha256(data).hexdigest()
         (tmp_path / str(item["filename"])).write_bytes(data)
 
-    assert status.validate_status(payload, handoff=True, artifact_dir=tmp_path) == []
+    failures = status.validate_status(payload, handoff=True, artifact_dir=tmp_path)
 
+    assert "handoff artifact is not JSON" in failures
+    assert "promotion PASS requires git repository" in failures
+
+
+def test_handoff_verifies_size_and_digest(tmp_path: Path) -> None:
+    payload = _promotion_pass_handoff()
+    _write_handoff_artifacts(tmp_path, payload)
     (tmp_path / str(payload["artifacts"][0]["filename"])).write_bytes(b"tampered")
     failures = status.validate_status(payload, handoff=True, artifact_dir=tmp_path)
 
@@ -283,7 +318,9 @@ def test_handoff_missing_artifact_file_fails(tmp_path: Path) -> None:
     assert "handoff artifact file is missing" in failures
 
 
-def test_package_a_uncommitted_commit_validate_start_b1(tmp_path: Path) -> None:
+def test_package_a_ready_to_commit_survives_clean_commit_without_rewrite(
+    tmp_path: Path,
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "-b", "main")
@@ -302,49 +339,246 @@ def test_package_a_uncommitted_commit_validate_start_b1(tmp_path: Path) -> None:
     plan.write_text("package A plan\n", encoding="utf-8", newline="\n")
     acceptance = tests_dir / "test_acceptance_demo.py"
     acceptance.write_text("assert True\n", encoding="utf-8", newline="\n")
-    uncommitted = _complete_package_a_for_repo(repo, base_head=base, package="A")
-    assert status.validate_status(uncommitted, repo_root=repo) == []
+    ready = _complete_package_a_for_repo(repo, base_head=base, package="A")
+    status_path = repo / status.STATUS_FILE
+    status.write_status_document(status_path, ready)
+    before_bytes = status_path.read_bytes()
+    assert _validate_status_file(status_path, repo) == []
 
-    b1_too_early = _b1_from_completed_a(uncommitted, resolved_head=base)
+    b1_too_early = _b1_from_completed_a(ready, resolved_head=base)
     early_failures = status.validate_status(b1_too_early, repo_root=repo)
     assert "unexpected path outside package write-set" in early_failures
+    assert status.PREDECESSOR_READY_CHECKPOINT_FAILURE in early_failures
 
-    status_path = repo / status.STATUS_FILE
-    status.write_status_document(status_path, uncommitted)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-m", "package A")
     resolved = _git_text(repo, "rev-parse", "HEAD").strip()
 
-    after_commit_failures = status.validate_status(uncommitted, repo_root=repo)
-    assert after_commit_failures
+    assert status_path.read_bytes() == before_bytes
+    after = status.load_json_object(status_path)
+    assert after["checkpoint_commit_state"] == "READY_TO_COMMIT"
+    assert after["resolved_completion_commit"] is None
+    assert after["observed_head"] == base
+    assert _validate_status_file(status_path, repo) == []
+    assert status.derived_resolved_completion_commit(repo, after) == resolved
 
-    committed = deepcopy(uncommitted)
-    committed["checkpoint_commit_state"] = "COMMITTED_CHECKPOINT"
-    committed["resolved_completion_commit"] = resolved
-    committed["observed_head"] = resolved
-    committed["observed_origin_main"] = resolved
-    committed["worktree_state"] = "CLEAN"
-    observed = status.observe_committed_diff(
-        repo,
-        base_head=base,
-        resolved_commit=resolved,
-        package="A",
-    )
-    committed["fingerprinted_files"] = observed["fingerprinted_files"]
-    committed["checkpoint_fingerprint_sha256"] = observed[
-        "checkpoint_fingerprint_sha256"
-    ]
-    extra = _ledger_entry(committed)
-    extra["previous_entry_sha256"] = committed["package_ledger"][-1]["entry_sha256"]
-    extra["entry_sha256"] = status.ledger_entry_digest(extra)
-    committed["package_ledger"] = [*uncommitted["package_ledger"], extra]
-    status.write_status_document(status_path, committed)
-    committed["worktree_state"] = "DIRTY_EXPECTED"
-    assert status.validate_status(committed, repo_root=repo) == []
-
-    b1 = _b1_from_completed_a(committed, resolved_head=resolved)
+    b1 = _b1_from_completed_a(after, resolved_head=resolved)
     status.write_status_document(status_path, b1)
-    assert status.validate_status(b1, repo_root=repo) == []
+    assert _validate_status_file(status_path, repo) == []
+
+
+def test_b1_requires_committed_ready_to_commit_predecessor(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    docs = repo / "docs"
+    tests_dir = repo / "tests"
+    docs.mkdir()
+    tests_dir.mkdir()
+    plan = docs / "implementation_plan.md"
+    plan.write_text("base plan\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "docs/implementation_plan.md")
+    _git(repo, "commit", "-m", "base")
+    base = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    plan.write_text("package A plan\n", encoding="utf-8", newline="\n")
+    acceptance = tests_dir / "test_acceptance_demo.py"
+    acceptance.write_text("assert True\n", encoding="utf-8", newline="\n")
+    ready = _complete_package_a_for_repo(repo, base_head=base, package="A")
+    head_snapshot = deepcopy(ready)
+    head_snapshot["schema_version"] = "agent-coach-d11-remediation-status/1.0.0"
+    head_snapshot["checkpoint_commit_state"] = "UNCOMMITTED"
+    status_path = repo / status.STATUS_FILE
+    status.write_status_document(status_path, head_snapshot)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "package A without READY_TO_COMMIT")
+    resolved = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    b1 = _b1_from_completed_a(ready, resolved_head=resolved)
+    status.write_status_document(status_path, b1)
+    failures = status.validate_status(b1, repo_root=repo)
+    assert status.PREDECESSOR_READY_CHECKPOINT_FAILURE in failures
+
+
+def test_b1_predecessor_requires_causal_first_parent(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    docs = repo / "docs"
+    tests_dir = repo / "tests"
+    docs.mkdir()
+    tests_dir.mkdir()
+    plan = docs / "implementation_plan.md"
+    plan.write_text("base plan\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "docs/implementation_plan.md")
+    _git(repo, "commit", "-m", "base")
+    base = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    plan.write_text("package A plan\n", encoding="utf-8", newline="\n")
+    acceptance = tests_dir / "test_acceptance_demo.py"
+    acceptance.write_text("assert True\n", encoding="utf-8", newline="\n")
+    ready = _complete_package_a_for_repo(repo, base_head=base, package="A")
+    status_path = repo / status.STATUS_FILE
+    status.write_status_document(status_path, ready)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "package A")
+    _git(repo, "commit", "--allow-empty", "-m", "unrelated")
+    drifted = _git_text(repo, "rev-parse", "HEAD").strip()
+    after = status.load_json_object(status_path)
+
+    b1 = _b1_from_completed_a(after, resolved_head=drifted)
+    status.write_status_document(status_path, b1)
+    failures = status.validate_status(b1, repo_root=repo)
+    assert status.PREDECESSOR_READY_CHECKPOINT_FAILURE in failures
+
+
+def test_clean_e1_ready_to_commit_then_e2_handoff_from_disk(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    docs = repo / "docs"
+    docs.mkdir()
+    plan = docs / "implementation_plan.md"
+    plan.write_text("base plan\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "docs/implementation_plan.md")
+    _git(repo, "commit", "-m", "base")
+    base = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    plan.write_text("package E1 plan\n", encoding="utf-8", newline="\n")
+    ready = _e1_ready_to_commit_for_repo(repo, base_head=base)
+    status_path = repo / status.STATUS_FILE
+    status.write_status_document(status_path, ready)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "package E1")
+    resolved = _git_text(repo, "rev-parse", "HEAD").strip()
+    assert _validate_status_file(status_path, repo) == []
+    tracked = status.load_json_object(status_path)
+    assert tracked["resolved_completion_commit"] is None
+    assert status.derived_resolved_completion_commit(repo, tracked) == resolved
+
+    handoff_dir = tmp_path / "handoff"
+    handoff_dir.mkdir()
+    handoff = _promotion_pass_handoff()
+    handoff["base_head"] = tracked["base_head"]
+    handoff["observed_head"] = resolved
+    handoff["observed_origin_main"] = resolved
+    handoff["resolved_completion_commit"] = resolved
+    handoff["autonomous_live_policy"] = tracked["autonomous_live_policy"]
+    handoff["current_package"] = "E2"
+    handoff["implementation_status"] = "COMPLETE"
+    handoff["package_verdict"] = "PASS"
+    e2_entry = _ledger_entry(handoff)
+    e2_entry["previous_entry_sha256"] = tracked["package_ledger"][-1]["entry_sha256"]
+    e2_entry["entry_sha256"] = status.ledger_entry_digest(e2_entry)
+    handoff["package_ledger"] = [*tracked["package_ledger"], e2_entry]
+    _write_handoff_artifacts(handoff_dir, handoff)
+    handoff_path = handoff_dir / "e2-handoff.json"
+    status.write_status_document(handoff_path, handoff, handoff=True)
+    assert (
+        status.validate_status(
+            status.load_json_object(handoff_path),
+            handoff=True,
+            repo_root=repo,
+            expected_bytes=handoff_path.read_bytes(),
+            artifact_dir=handoff_dir,
+        )
+        == []
+    )
+
+    independent = _promotion_pass_handoff()
+    independent["resolved_completion_commit"] = resolved
+    _write_handoff_artifacts(handoff_dir, independent)
+    independent_failures = status.validate_status(
+        independent,
+        handoff=True,
+        repo_root=repo,
+        artifact_dir=handoff_dir,
+    )
+    assert "package_ledger is not append-only" in independent_failures
+
+    missing_report = deepcopy(handoff)
+    missing_report["artifacts"] = [
+        item
+        for item in missing_report["artifacts"]
+        if item["artifact_type"] != "promotion_report"
+    ]
+    missing = status.validate_status(
+        missing_report,
+        handoff=True,
+        artifact_dir=handoff_dir,
+    )
+    assert "promotion PASS is missing required evidence artifacts" in missing
+
+
+def test_old_schema_version_fails() -> None:
+    payload = _complete_package_a()
+    payload["schema_version"] = "agent-coach-d11-remediation-status/1.0.0"
+
+    failures = status.validate_status(payload)
+
+    assert "unsupported schema_version" in failures
+
+
+def test_committed_checkpoint_state_is_rejected() -> None:
+    payload = _complete_package_a()
+    payload["checkpoint_commit_state"] = "COMMITTED_CHECKPOINT"
+    payload["resolved_completion_commit"] = HEAD
+
+    failures = status.validate_status(payload)
+
+    assert "checkpoint_commit_state is invalid" in failures
+
+
+def test_in_progress_hold_allows_released_lease() -> None:
+    payload = _in_progress_hold_package_a()
+
+    assert status.validate_status(payload) == []
+
+
+def test_latest_ledger_entry_can_reopen_package() -> None:
+    previous = _complete_package_a()
+    reopened = _in_progress_hold_package_a()
+    new_entry = _ledger_entry(reopened)
+    new_entry["previous_entry_sha256"] = previous["package_ledger"][0]["entry_sha256"]
+    new_entry["entry_sha256"] = status.ledger_entry_digest(new_entry)
+    reopened["package_ledger"] = [previous["package_ledger"][0], new_entry]
+
+    assert status.validate_status(reopened, previous_status=previous) == []
+
+
+def test_promotion_pass_without_promotion_report_fails() -> None:
+    payload = _promotion_pass_handoff()
+    payload["artifacts"] = [
+        item
+        for item in payload["artifacts"]
+        if item["artifact_type"] != "promotion_report"
+    ]
+
+    failures = status.validate_status(payload, handoff=True)
+
+    assert "promotion PASS is missing required evidence artifacts" in failures
+
+
+def test_promotion_pass_requires_frozen_clean_released() -> None:
+    dirty = _promotion_pass_handoff()
+    dirty["worktree_state"] = "DIRTY_EXPECTED"
+    not_frozen = _promotion_pass_handoff()
+    not_frozen["checkpoint_commit_state"] = "READY_TO_COMMIT"
+    not_frozen["resolved_completion_commit"] = None
+
+    dirty_failures = status.validate_status(dirty, handoff=True)
+    frozen_failures = status.validate_status(not_frozen, handoff=True)
+
+    assert "promotion PASS requires CLEAN worktree" in dirty_failures
+    assert "promotion PASS requires FROZEN_REVIEWED" in frozen_failures
+
+
+def test_promotion_pass_without_artifact_dir_fails() -> None:
+    payload = _promotion_pass_handoff()
+
+    failures = status.validate_status(payload, handoff=True)
+
+    assert "promotion PASS requires verified artifact files" in failures
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -393,8 +627,8 @@ def _b1_from_completed_a(
     b1["checkpoint_commit_state"] = "UNCOMMITTED"
     b1["resolved_completion_commit"] = None
     b1["base_head"] = resolved_head
-    b1["observed_head"] = completed_a["observed_head"]
-    b1["observed_origin_main"] = completed_a["observed_origin_main"]
+    b1["observed_head"] = resolved_head
+    b1["observed_origin_main"] = resolved_head
     b1["worktree_state"] = "DIRTY_EXPECTED"
     b1["checks_passed"] = []
     b1["fingerprinted_files"] = []
@@ -437,14 +671,10 @@ def _complete_package_a_for_repo(
     payload["checkpoint_fingerprint_sha256"] = observed[
         "checkpoint_fingerprint_sha256"
     ]
-    payload["changed_files"] = [
-        {
-            "path": item["path"],
-            "purpose": "package A artifact",
-            "state": item["state"],
-        }
-        for item in observed["fingerprinted_files"]
-    ]
+    payload["changed_files"] = _changed_files_from_fingerprint(
+        observed["fingerprinted_files"],
+        status_state="ADD",
+    )
     payload["package_ledger"] = [_ledger_entry(payload)]
     return payload
 
@@ -477,6 +707,7 @@ def _complete_package_a() -> dict[str, Any]:
         checks_passed=checks,
         fingerprinted_files=files,
     )
+    payload["checkpoint_commit_state"] = "READY_TO_COMMIT"
     payload["checkpoint_fingerprint_sha256"] = status.fingerprint_sha256(
         base_head=HEAD,
         files=files,
@@ -545,14 +776,7 @@ def _base_payload(
         "d11_promotion_status": "HOLD",
         "network_provider_calls": 0,
         "provider_cost_status": "zero",
-        "changed_files": [
-            {
-                "path": item["path"],
-                "purpose": "package A artifact",
-                "state": item["state"],
-            }
-            for item in fingerprinted_files
-        ],
+        "changed_files": _changed_files_from_fingerprint(fingerprinted_files),
         "checks_passed": checks_passed,
         "checks_not_run": ["full_pytest_suite", "live_provider_eval"],
         "remaining_risks": [
@@ -647,6 +871,9 @@ def _valid_e2_handoff() -> dict[str, Any]:
     payload["current_package"] = "E2"
     payload["implementation_status"] = "COMPLETE"
     payload["package_verdict"] = "PASS"
+    payload["checkpoint_commit_state"] = "FROZEN_REVIEWED"
+    payload["worktree_state"] = "CLEAN"
+    payload["resolved_completion_commit"] = HEAD
     e2_entry = _ledger_entry(payload)
     e2_entry["previous_entry_sha256"] = previous
     e2_entry["entry_sha256"] = status.ledger_entry_digest(e2_entry)
@@ -667,3 +894,165 @@ def _valid_e2_handoff() -> dict[str, Any]:
         )
     ]
     return handoff
+
+
+def _promotion_pass_handoff() -> dict[str, Any]:
+    payload = _valid_e2_handoff()
+    payload["d11_promotion_status"] = "PASS"
+    return payload
+
+
+def _in_progress_hold_package_a() -> dict[str, Any]:
+    payload = _in_progress_package_a()
+    payload["package_verdict"] = "HOLD"
+    payload["lease_status"] = "RELEASED"
+    payload["active_session_id"] = None
+    payload["package_ledger"] = [_ledger_entry(payload)]
+    return payload
+
+
+def _validate_status_file(path: Path, repo: Path) -> list[str]:
+    return status.validate_status(
+        status.load_json_object(path),
+        repo_root=repo,
+        expected_bytes=path.read_bytes(),
+    )
+
+
+def _changed_files_from_fingerprint(
+    files: list[dict[str, str]],
+    *,
+    purpose: str = "package A artifact",
+    status_state: str = "MODIFY",
+) -> list[dict[str, str]]:
+    items = [
+        {
+            "path": item["path"],
+            "purpose": purpose,
+            "state": item["state"],
+        }
+        for item in files
+    ]
+    items.append(
+        {
+            "path": status.STATUS_FILE,
+            "purpose": purpose,
+            "state": status_state,
+        }
+    )
+    items.sort(key=lambda item: item["path"])
+    return items
+
+
+def _minimal_artifact_payload(
+    artifact_type: str,
+    resolved_commit: str,
+    *,
+    public_digest: str | None = None,
+) -> dict[str, Any]:
+    if artifact_type == "promotion_report":
+        return {
+            "promotion_status": "PASS",
+            "evaluated_commit": resolved_commit,
+        }
+    if artifact_type in {"forced_live_public", "autonomous_live_public"}:
+        return {
+            "schema_version": "agent-coach-live-eval-public/test",
+            "evaluated_commit": resolved_commit,
+        }
+    if artifact_type in {"forced_live_wrapper", "autonomous_live_wrapper"}:
+        return {
+            "evaluated_commit": resolved_commit,
+            "public_artifact_sha256": public_digest or FILE_SHA,
+        }
+    return {"commit": resolved_commit}
+
+
+def _write_handoff_artifacts(directory: Path, payload: dict[str, Any]) -> None:
+    resolved = str(payload["resolved_completion_commit"])
+    digest_by_type: dict[str, str] = {}
+    for item in payload["artifacts"]:
+        artifact_type = str(item["artifact_type"])
+        if artifact_type.endswith("_wrapper"):
+            continue
+        data = json.dumps(
+            _minimal_artifact_payload(artifact_type, resolved),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        item["size_bytes"] = len(data)
+        item["sha256"] = hashlib.sha256(data).hexdigest()
+        digest_by_type[artifact_type] = str(item["sha256"])
+        (directory / str(item["filename"])).write_bytes(data)
+    for item in payload["artifacts"]:
+        artifact_type = str(item["artifact_type"])
+        if not artifact_type.endswith("_wrapper"):
+            continue
+        public_type = (
+            "forced_live_public"
+            if artifact_type == "forced_live_wrapper"
+            else "autonomous_live_public"
+        )
+        data = json.dumps(
+            _minimal_artifact_payload(
+                artifact_type,
+                resolved,
+                public_digest=digest_by_type.get(public_type),
+            ),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        item["size_bytes"] = len(data)
+        item["sha256"] = hashlib.sha256(data).hexdigest()
+        (directory / str(item["filename"])).write_bytes(data)
+
+
+def _e1_ready_to_commit_for_repo(repo: Path, *, base_head: str) -> dict[str, Any]:
+    observed = status.observe_worktree(
+        repo,
+        base_head=base_head,
+        package="E1",
+    )
+    payload = _complete_package_a()
+    payload["current_package"] = "E1"
+    payload["last_completed_package"] = "E1"
+    payload["next_allowed_package"] = "E2"
+    payload["checkpoint_commit_state"] = "READY_TO_COMMIT"
+    payload["base_head"] = base_head
+    payload["observed_head"] = observed["head"]
+    payload["observed_origin_main"] = observed["origin_main"]
+    payload["fingerprinted_files"] = observed["fingerprinted_files"]
+    payload["checkpoint_fingerprint_sha256"] = observed[
+        "checkpoint_fingerprint_sha256"
+    ]
+    payload["changed_files"] = _changed_files_from_fingerprint(
+        observed["fingerprinted_files"],
+        purpose="package E1 artifact",
+        status_state="ADD",
+    )
+    payload["checks_passed"] = [
+        {
+            "id": check_id,
+            "command": f"python -m pytest {check_id}",
+            "platform": "win32/Windows",
+            "result": "PASS",
+        }
+        for check_id in status.PACKAGE_REQUIRED_CHECKS["E1"]
+    ]
+    payload["exact_resume_instruction"] = (
+        "Start E2 from the derived clean HEAD; do not edit tracked status."
+    )
+    offline_entries = []
+    previous = None
+    for package in status.OFFLINE_PACKAGES:
+        payload["current_package"] = package
+        payload["implementation_status"] = "COMPLETE"
+        payload["package_verdict"] = "PASS"
+        entry = _ledger_entry(payload)
+        entry["previous_entry_sha256"] = previous
+        entry["entry_sha256"] = status.ledger_entry_digest(entry)
+        offline_entries.append(entry)
+        previous = entry["entry_sha256"]
+    payload["current_package"] = "E1"
+    payload["package_ledger"] = offline_entries
+    return payload

@@ -76,9 +76,9 @@ validator и ledger.
 
 | Package | Status | Verdict | Notes |
 | --- | --- | --- | --- |
-| A | COMPLETE | PASS | Scope, acceptance diagnostics, status ledger/validator. Checkpoint still `UNCOMMITTED`. |
-| B1 | NOT_STARTED | NOT_RUN | Next allowed after A is committed and re-validated. |
-| B2 | NOT_STARTED | NOT_RUN | |
+| A | COMPLETE | PASS | Schema 2.0.0 READY_TO_COMMIT on an A-only tree; later packages require this committed predecessor checkpoint. Do not start B2. |
+| B1 | IN_PROGRESS | HOLD | Isolated in stash `d11-b1-c2-isolation-after-output-path-fix`; not the active package. Do not start B2. |
+| B2 | NOT_STARTED | NOT_RUN | Do not start. |
 | C1 | NOT_STARTED | NOT_RUN | |
 | C2 | NOT_STARTED | NOT_RUN | Owns remaining R-16 bare-`python` commands outside acceptance. |
 | D0 | NOT_STARTED | NOT_RUN | |
@@ -95,15 +95,31 @@ Package A, already done:
 - bounded reproducibility diagnostics различают `same_accepted_response` и
   `same_result_projection` без печати полного response;
 - Windows localhost smoke: 10/10 repeats, flake not claimed eliminated;
-- STATUS_FILE, STATUS_VALIDATOR, tests, fingerprint, append-only ledger,
-  committed-diff resume, E2 size/pair/digest checks;
 - AUTONOMOUS_LIVE_POLICY = `DOCUMENTED_LIMITATION`;
-- `next_allowed_package = B1`; overall D11 promotion remains HOLD.
+- schema `2.0.0` tracked/handoff contract: `READY_TO_COMMIT` without
+  self-referential `resolved_completion_commit`;
+- E2 promotion PASS fail-closed: `promotion_report`, `FROZEN_REVIEWED`,
+  `CLEAN`, `RELEASED` and verified artifact files;
+- status validator CLI is rechecked after the review fixes;
+- A-only public docs describe HEAD runtime: tracked
+  `docs/evidence/live-eval-public.json` remains the current path, and strict
+  `--release` still requires that artifact. B1 historical-path claims were
+  reverted out of overlapping A docs;
+- later packages require HEAD:`docs/d11_remediation_status.json` to be a
+  schema 2.0.0 READY_TO_COMMIT predecessor with a causal first-parent
+  checkpoint; schema 1.0.0/`UNCOMMITTED` HEAD cannot open B1;
+- B1/C2 leftovers are isolated in stash
+  `d11-b1-c2-isolation-after-output-path-fix` and are not A artifacts.
 
 Package A, still open:
 
-- no git commit yet (`checkpoint_commit_state = UNCOMMITTED`);
 - R-16 for non-acceptance `python` commands is deferred to C2.
+
+Package B1, present as leftovers, not the active package:
+
+- restore stash `d11-b1-c2-isolation-after-output-path-fix` only after the
+  A READY_TO_COMMIT checkpoint is committed and validated on clean HEAD;
+- do not start B2.
 
 ## Master-prompt
 
@@ -309,14 +325,16 @@ D11 в `docs/implementation_plan.md` остаётся нормативным; п
    случаях не доверяй STATUS_FILE, если validator не дал PASS. Exact match
    принимается после PASS. Новый clean HEAD можно признать ожидаемым
    package commit без изменения истории только если recorded observed_head
-   является его ancestor, STATUS_FILE не был переписан после checkpoint, а
-   diff до нового HEAD состоит из перечисленных package files и STATUS_FILE.
-   Запиши найденный commit как `resolved_completion_commit` при следующем
-   status update. Любое другое расхождение HEAD, policy или дерева требует
-   read-only reconciliation и HOLD до явного OWNER_APPROVAL.
+   является first parent этого HEAD, STATUS_FILE byte-identical с committed
+   `READY_TO_COMMIT` snapshot, а diff `observed_head..HEAD` состоит из
+   перечисленных package files и STATUS_FILE. Validator выводит resolved
+   commit из Git; не записывай его в tracked STATUS_FILE. Любое другое
+   расхождение HEAD, policy или дерева требует read-only reconciliation и
+   HOLD до явного OWNER_APPROVAL.
 
-   Если validator дал PASS для `COMPLETE + PASS + UNCOMMITTED`, команда
-   продолжения разрешает завершить checkpoint перед следующим пакетом:
+   Если validator дал PASS для `COMPLETE + PASS + READY_TO_COMMIT` на грязном
+   дереве, команда продолжения разрешает завершить checkpoint перед следующим
+   пакетом:
 
    - повторно сверь Git diff с `fingerprinted_files` и `changed_files`;
    - повтори validator, package-required checks, `check_public_release.py` и
@@ -324,9 +342,10 @@ D11 в `docs/implementation_plan.md` остаётся нормативным; п
    - если они проходят, создай локальный package checkpoint commit ровно из
      перечисленных файлов и STATUS_FILE; не включай посторонние изменения, не
      выполняй push и не создавай tag;
-   - зафиксируй новый HEAD как `resolved_completion_commit`, переведи snapshot
-     в `COMMITTED_CHECKPOINT`, добавь hash-chained reconciliation entry и снова
-     проверь validator;
+   - не редактируй tracked STATUS_FILE после коммита: он остаётся
+     `READY_TO_COMMIT` с `resolved_completion_commit: null`;
+   - validator на чистом дереве выводит resolved commit как HEAD и проверяет,
+     что `observed_head` равен first parent HEAD;
    - только затем получи lease вычисленного следующего пакета. Эта техническая
      фиксация не считается вторым WORK_PACKAGE.
 
@@ -370,13 +389,12 @@ D11 в `docs/implementation_plan.md` остаётся нормативным; п
 8. STATUS_FILE сериализуется как UTF-8 JSON object с точной schema, stable key
    ordering, двухпробельным indent и завершающим newline. Минимальная структура:
 
-   - schema_version: `agent-coach-d11-remediation-status/1.0.0`;
+   - schema_version: `agent-coach-d11-remediation-status/2.0.0`;
    - updated_at_utc;
    - autonomous_live_policy;
-   - base_head, observed_head, observed_origin_main и необязательный
-     resolved_completion_commit;
-   - checkpoint_commit_state: UNCOMMITTED | COMMITTED_CHECKPOINT |
-     FROZEN_REVIEWED;
+   - base_head, observed_head, observed_origin_main и
+     resolved_completion_commit только null в tracked file;
+   - checkpoint_commit_state: UNCOMMITTED | READY_TO_COMMIT;
    - checkpoint_fingerprint_sha256 и fingerprinted_files;
    - worktree_state: CLEAN | DIRTY_EXPECTED;
    - active_session_id, session_started_at_utc и
@@ -403,9 +421,13 @@ D11 в `docs/implementation_plan.md` остаётся нормативным; п
    предыдущей.
 
    E2_HANDOFF_REF использует отдельную exact schema
-   `agent-coach-d11-e2-handoff/1.0.0`: те же session/package/provenance поля,
+   `agent-coach-d11-e2-handoff/2.0.0`: те же session/package/provenance поля,
    плюс только bounded artifact types, filenames, sizes и SHA-256 digests.
-   Абсолютные пути и содержимое evidence запрещены.
+   Абсолютные пути и содержимое evidence запрещены. `FROZEN_REVIEWED` и
+   `resolved_completion_commit` живут только в этом внешнем wrapper; tracked
+   STATUS_FILE их не хранит. Promotion PASS требует `promotion_report`,
+   `FROZEN_REVIEWED`, `CLEAN`, `RELEASED` и фактически проверенные artifact
+   files.
 
    Fingerprint contract:
 
@@ -428,11 +450,19 @@ D11 в `docs/implementation_plan.md` остаётся нормативным; п
    - запрет E2 до COMPLETE + PASS всех A-E1;
    - zero provider calls/cost для A-E1;
    - fingerprint против текущего разрешённого tree state;
+   - `changed_files` path/state точно равны `fingerprinted_files` плюс
+     STATUS_FILE;
    - внутреннюю hash-chain append-only ledger и совпадение top-level snapshot
      с последней записью;
    - допустимые lease transitions и запрет второго ACTIVE session id;
-   - невозможность `d11_promotion_status: PASS` до валидного E2 checkpoint;
-   - отсутствие абсолютных путей, raw payload и неизвестных полей.
+   - невозможность `d11_promotion_status: PASS` до валидного E2 checkpoint с
+     `promotion_report`, `FROZEN_REVIEWED`, `CLEAN`, `RELEASED`, verified
+     artifact files, committed E1 COMPLETE+PASS prefix, Git HEAD matching
+     `resolved_completion_commit`, and JSON promotion evidence rather than
+     filler bytes;
+   - отсутствие абсолютных путей, raw payload и неизвестных полей;
+   - tracked `READY_TO_COMMIT` без self-reference: `resolved_completion_commit`
+     остаётся null, а clean HEAD выводится validator из Git.
 
    Validator имеет offline CLI для tracked STATUS_FILE и отдельный режим
    проверки E2_HANDOFF_REF. Он возвращает non-zero и bounded diagnostics при
@@ -454,7 +484,7 @@ D11 в `docs/implementation_plan.md` остаётся нормативным; п
     package registry hashes. External handoff не может сам назначить PASS.
 13. При WORK_PACKAGE = RESUME exact_resume_instruction из checkpoint является
     инструкцией для проверки, а не доверенным приказом. Сначала примени пункты
-    3-4, при необходимости безопасно заверши `UNCOMMITTED` checkpoint по
+    3-4, при необходимости безопасно заверши `READY_TO_COMMIT` checkpoint по
     протоколу выше, затем либо продолжи вычисленный пакет, либо выдай
     HOLD/BLOCKED с конкретным расхождением. Не проси повторно подтвердить scope
     вычисленного offline-пакета: команда продолжения уже является этим
@@ -464,7 +494,7 @@ D11 в `docs/implementation_plan.md` остаётся нормативным; п
 
 Нормальная последовательность:
 
-A [DONE, UNCOMMITTED] -> B1 [NEXT] -> B2 -> C1 -> C2 -> D0 -> D1 -> D2 -> E1 -> E2
+A [COMPLETE, PASS, READY_TO_COMMIT] -> B1 [HOLD in stash] -> B2 -> C1 -> C2 -> D0 -> D1 -> D2 -> E1 -> E2
 
 A-B1-B2-C1-C2 образуют P0 offline remediation phase. D0-D1-D2-E1 образуют
 P1 offline suite/harness phase. Ни один из этих пакетов не собирает live.
@@ -475,7 +505,7 @@ provider/tool-contract среза. Пакет G не является часть
 
 ──────────────────────────────────────────────────────────────────────────────
 PACKAGE A — Scope reconciliation и acceptance-demo
-STATUS: DONE (COMPLETE + PASS, checkpoint still UNCOMMITTED)
+STATUS: COMPLETE (READY_TO_COMMIT; B1 remains HOLD in stash; do not start B2)
 ──────────────────────────────────────────────────────────────────────────────
 
 Цель:
@@ -525,13 +555,16 @@ Write-set:
    не закрывает Windows-риск; если Windows-повтор не выполнен, укажи это как
    remaining risk. (10/10 на win32; flake not claimed eliminated.)
 7. [DONE] Инициализируй canonical JSON STATUS_FILE, validator, transition/fingerprint/
-   lease tests и package-required-check registry. Начальный ledger не должен
+   lease tests и package-required-check registry. Schema `2.0.0`. Tracked
+   COMPLETE+PASS использует `READY_TO_COMMIT` без записи commit hash в JSON.
+   E2 promotion PASS fail-closed на неполное evidence. Начальный ledger не должен
    утверждать завершение пакетов, которые не доказаны текущим проходом.
 
 DoD:
 
-- [PARTIAL] scope плана соответствует файлам в worktree; HEAD still lacks the
-  Package A commit (`UNCOMMITTED`);
+- [DONE] A-only public docs match HEAD runtime; B1 leftovers are isolated;
+  a schema 2.0.0 READY_TO_COMMIT snapshot is recorded without rewriting
+  premature local commit `d5d1fe0`;
 - [DONE] rollback плана включает acceptance-demo;
 - [DONE] targeted acceptance suite проходит;
 - [DONE] диагностика сообщает конкретную ветвь reproducibility failure;
@@ -539,7 +572,13 @@ DoD:
   процессов на явно названной платформе (win32/Windows, 10/10);
 - [DONE] malformed transition, changed policy, missing required check, fingerprint
   mismatch и competing ACTIVE lease дают validator failure;
-- [DONE] валидный A COMPLETE + PASS checkpoint разрешает только B1;
+- [DONE] clean READY_TO_COMMIT commit validates from the tracked file without
+  rewriting `resolved_completion_commit`;
+- [DONE] E2 promotion PASS rejects missing `promotion_report`, non-frozen and
+  dirty checkpoints, and unverified artifacts;
+- [DONE] schema 2.0.0 rejects 1.0.0 documents;
+- [DONE] валидный A COMPLETE + PASS READY_TO_COMMIT checkpoint записан;
+  next_allowed is B1 after the local A commit;
 - [DONE] `git diff --check` чист.
 
 Проверки:
@@ -550,37 +589,38 @@ DoD:
 - [DONE] повтор проблемного теста согласованное число раз;
 - [DONE] `.\.venv\Scripts\python.exe scripts/check_public_release.py`.
 
-Остановись после promotion report пакета A. Package A implementation is
-complete; do not redo it. The remaining Package A action is the authorized
-local checkpoint commit, not a second implementation pass.
+Остановись после promotion report пакета A. Package A is COMPLETE+PASS
+READY_TO_COMMIT. Do not start B2. Leave B1 HOLD in stash until this
+checkpoint is committed and validated on clean HEAD.
 
 ──────────────────────────────────────────────────────────────────────────────
 PACKAGE B1 — Единый live registry и causal evidence harness
-STATUS: NOT STARTED (next after A commit)
+STATUS: IN_PROGRESS (HOLD leftovers isolated in stash; not the active package)
 ──────────────────────────────────────────────────────────────────────────────
 
 Цель:
 
-- убрать два источника истины `LIVE_EVAL_CASES` и
+- [DONE] убрать два источника истины `LIVE_EVAL_CASES` и
   `LIVE_EVAL_CASE_REGISTRY`;
-- определить causal public-artifact contract, не превышающий 64000 bytes;
-- вывести старый tracked live JSON из current promotion path.
+- [DONE] определить causal public-artifact contract, не превышающий 64000 bytes;
+- [DONE] вывести старый tracked live JSON из current promotion path.
 
 Предпочтительный write-set:
 
-- `src/agent_coach/eval/live_evidence.py`;
-- `scripts/run_live_eval.py`;
-- `tests/test_live_eval_runner.py`;
-- `tests/test_public_release_gate.py`;
-- `scripts/check_public_release.py`;
-- tracked historical evidence и ссылающиеся на него документы;
-- при необходимости один package-owned registry module.
+- [DONE] `src/agent_coach/eval/live_evidence.py`;
+- [DONE] `scripts/run_live_eval.py`;
+- [DONE] `tests/test_live_eval_runner.py`;
+- [DONE] `tests/test_public_release_gate.py`;
+- [DONE] `scripts/check_public_release.py`;
+- [DONE] tracked historical evidence и ссылающиеся на него документы;
+- [DONE] canonical registry lives in `live_evidence.py`.
 
 Требования:
 
-1. Один canonical registry является источником кейсов для runner и validator.
-2. Вычисляй stable canonical registry hash.
-3. Harness и schema нового live artifact требуют минимум:
+1. [DONE] Один canonical registry является источником кейсов для runner и validator.
+2. [DONE] Вычисляй stable canonical registry hash. Hash включает исполняемые
+   `search_query` и `scripted_answer`.
+3. [DONE] Harness и schema нового live artifact требуют минимум:
 
    - schema version;
    - evaluated commit;
@@ -593,30 +633,36 @@ STATUS: NOT STARTED (next after A commit)
    - bounded per-case results;
    - recomputable task-success metric.
 
-4. Не запускай live provider и не создавай новый фактический live artifact в
+4. [DONE] Не запускай live provider и не создавай новый фактический live artifact в
    этом пакете. Проверяй schema scripted fixtures.
-5. Promotion evidence пишется вне checkout. Tracked historical JSON не является
-   promotion input.
-6. Старый artifact получит явный `historical_example` contract. Предпочтительно
+5. [DONE] Promotion evidence пишется вне checkout. Tracked historical JSON не является
+   promotion input. Live `--output` и wrapper paths внутри checkout отклоняются.
+6. [DONE] Старый artifact получит явный `historical_example` contract. Предпочтительно
    перемести его под `docs/evidence/historical/`; обнови release checker так,
    чтобы strict repository hygiene не требовала current live evidence и не
    сверяла historical commit с HEAD.
-7. Historical artifact может проверяться на public safety, размер и допустимую
+7. [DONE] Historical artifact может проверяться на public safety, размер и допустимую
    historical schema, но wrapper/promotion всегда отвергают его как current.
-8. Scripted payload нельзя превратить в live простым переключением полей.
-9. Ошибка provenance должна быть bounded и не раскрывать provider data.
+   Path и classification должны совпадать.
+8. [DONE] Scripted payload нельзя превратить в live простым переключением полей.
+9. [DONE] Ошибка provenance должна быть bounded и не раскрывать provider data.
+10. [DONE] Current public schema fail-closed: unexpected keys и unsafe values
+    (включая secret-like identifier fields) отклоняются.
+11. [DONE] Public release gate сверяет current artifact с HEAD.
 
 DoD:
 
-- registry drift невозможен без тестового отказа;
-- artifact другого commit или dirty run отклоняется;
-- JSON <= 64000 bytes;
-- historical example не удовлетворяет current-evidence validator;
-- `--release` проходит без требования tracked current live artifact;
-- scripted artifact отклоняется независимо от ручной правки одного флага;
-- default scripted tests остаются offline.
+- [DONE] registry drift невозможен без тестового отказа;
+- [DONE] artifact другого commit или dirty run отклоняется;
+- [DONE] JSON <= 64000 bytes;
+- [DONE] historical example не удовлетворяет current-evidence validator;
+- [DONE] `--release` проходит без требования tracked current live artifact;
+- [DONE] scripted artifact отклоняется независимо от ручной правки одного флага;
+- [DONE] default scripted tests остаются offline;
+- [HOLD] package verdict remains HOLD; restore the stash after the A
+  checkpoint is on clean HEAD before recording B1 COMPLETE+PASS.
 
-Остановись после promotion report пакета B1.
+Остановись после promotion report пакета B1. Do not start B2.
 
 ──────────────────────────────────────────────────────────────────────────────
 PACKAGE B2 — Wrapper и promotion gate harness

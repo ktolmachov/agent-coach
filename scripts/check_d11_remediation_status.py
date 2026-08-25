@@ -3,6 +3,11 @@
 The checker is offline, fail-closed and never rewrites the checkpoint. It
 accepts the tracked status file by default and a separate E2 handoff document
 outside the checkout when ``--handoff`` is supplied.
+
+Tracked checkpoints never store the commit they will be committed into.
+``READY_TO_COMMIT`` snapshots keep ``resolved_completion_commit`` null; after a
+clean commit the validator binds HEAD from Git without editing the file.
+``FROZEN_REVIEWED`` and the resolved commit belong to the external E2 wrapper.
 """
 from __future__ import annotations
 
@@ -19,8 +24,8 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STATUS_PATH = REPO_ROOT / "docs" / "d11_remediation_status.json"
-STATUS_SCHEMA_VERSION = "agent-coach-d11-remediation-status/1.0.0"
-HANDOFF_SCHEMA_VERSION = "agent-coach-d11-e2-handoff/1.0.0"
+STATUS_SCHEMA_VERSION = "agent-coach-d11-remediation-status/2.0.0"
+HANDOFF_SCHEMA_VERSION = "agent-coach-d11-e2-handoff/2.0.0"
 DELETED_CONTENT_SHA256 = hashlib.sha256(
     b"agent-coach-d11-fingerprint:DELETED"
 ).hexdigest()
@@ -31,7 +36,7 @@ PACKAGE_VERDICTS = ("NOT_RUN", "PASS", "HOLD", "BLOCKED")
 PROMOTION_STATUSES = ("HOLD", "PASS", "BLOCKED")
 CHECKPOINT_COMMIT_STATES = (
     "UNCOMMITTED",
-    "COMMITTED_CHECKPOINT",
+    "READY_TO_COMMIT",
     "FROZEN_REVIEWED",
 )
 WORKTREE_STATES = ("CLEAN", "DIRTY_EXPECTED")
@@ -282,6 +287,7 @@ PACKAGE_REQUIRED_CHECKS: dict[str, tuple[str, ...]] = {
         "public_release",
         "git_diff_check",
         "commit_resume_lifecycle",
+        "e1_e2_clean_promotion_lifecycle",
     ),
     "B1": (
         "live_registry_suite",
@@ -337,6 +343,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             failures = validate_status(
                 payload,
                 handoff=True,
+                repo_root=REPO_ROOT,
                 expected_bytes=handoff_path.read_bytes(),
                 artifact_dir=handoff_path.parent,
             )
@@ -491,16 +498,26 @@ def validate_status(
         failures.extend(_validate_tracked_fields(payload))
     failures.extend(_validate_strings_and_paths(payload))
     previous = previous_status
-    if previous is None and repo_root is not None and not handoff:
+    if previous is None and repo_root is not None:
         previous = load_previous_status(repo_root)
     failures.extend(
         _validate_ledger(payload, handoff=handoff, previous_status=previous)
     )
-    failures.extend(_validate_package_transition(payload, handoff=handoff))
+    failures.extend(
+        _validate_package_transition(payload, handoff=handoff, repo_root=repo_root)
+    )
     failures.extend(_validate_lease_snapshot(payload, handoff=handoff))
     failures.extend(_validate_required_checks(payload, handoff=handoff))
     failures.extend(_validate_offline_cost(payload, handoff=handoff))
-    failures.extend(_validate_promotion(payload, handoff=handoff))
+    failures.extend(
+        _validate_promotion(
+            payload,
+            handoff=handoff,
+            artifact_dir=artifact_dir,
+            repo_root=repo_root,
+            previous_status=previous,
+        )
+    )
     if expected_bytes is not None:
         serialized = serialize_status(payload, handoff=handoff).encode("utf-8")
         if expected_bytes != serialized:
@@ -608,26 +625,40 @@ def observe_checkpoint(
         package=package,
     )
     commit_state = payload.get("checkpoint_commit_state")
-    if commit_state == "UNCOMMITTED":
-        return worktree
+    if commit_state != "READY_TO_COMMIT" or worktree["changed_paths"]:
+        return {
+            **worktree,
+            "derived_resolved_completion_commit": None,
+            "first_parent": None,
+        }
     committed = observe_committed_diff(
         repo_root,
         base_head=base_head,
-        resolved_commit=str(payload["resolved_completion_commit"]),
+        resolved_commit=str(worktree["head"]),
         package=package,
-    )
-    unexpected = tuple(
-        dict.fromkeys(
-            [*committed["unexpected_paths"], *worktree["unexpected_paths"]]
-        )
     )
     return {
         **worktree,
         "fingerprinted_files": committed["fingerprinted_files"],
         "checkpoint_fingerprint_sha256": committed["checkpoint_fingerprint_sha256"],
-        "unexpected_paths": unexpected,
+        "unexpected_paths": tuple(
+            dict.fromkeys(
+                [*committed["unexpected_paths"], *worktree["unexpected_paths"]]
+            )
+        ),
         "committed_paths": committed["changed_paths"],
+        "derived_resolved_completion_commit": worktree["head"],
+        "first_parent": _first_parent(repo_root),
     }
+
+
+def derived_resolved_completion_commit(
+    repo_root: Path,
+    payload: Mapping[str, Any],
+) -> str | None:
+    """Return the Git-bound completion commit without editing tracked JSON."""
+    observed = observe_checkpoint(repo_root, payload)
+    return observed.get("derived_resolved_completion_commit")
 
 
 def load_previous_status(
@@ -690,8 +721,15 @@ def _validate_common_fields(payload: Mapping[str, Any], *, handoff: bool) -> lis
         failures.append("resolved_completion_commit is invalid")
     if payload.get("autonomous_live_policy") not in POLICIES:
         failures.append("autonomous_live_policy is invalid")
-    if payload.get("checkpoint_commit_state") not in CHECKPOINT_COMMIT_STATES:
+    commit_state = payload.get("checkpoint_commit_state")
+    if commit_state not in CHECKPOINT_COMMIT_STATES:
         failures.append("checkpoint_commit_state is invalid")
+    elif commit_state in {"UNCOMMITTED", "READY_TO_COMMIT"} and resolved is not None:
+        failures.append(f"{commit_state} cannot set resolved_completion_commit")
+    elif commit_state == "FROZEN_REVIEWED" and not _commit(resolved):
+        failures.append("FROZEN_REVIEWED requires resolved_completion_commit")
+    if not handoff and commit_state == "FROZEN_REVIEWED":
+        failures.append("tracked status cannot use FROZEN_REVIEWED")
     if payload.get("worktree_state") not in WORKTREE_STATES:
         failures.append("worktree_state is invalid")
     if payload.get("lease_status") not in LEASE_STATUSES:
@@ -749,6 +787,7 @@ def _validate_tracked_fields(payload: Mapping[str, Any]) -> list[str]:
         failures.append("checkpoint fingerprint does not match declared files")
     if STATUS_FILE in {item["path"] for item in files}:
         failures.append("STATUS_FILE cannot be fingerprinted")
+    failures.extend(_validate_changed_files_manifest(payload))
     return failures
 
 
@@ -789,7 +828,13 @@ def _validate_handoff_fields(
     ):
         failures.append("BLOCKER policy requires autonomous live public/wrapper pair")
     if artifact_dir is not None:
-        failures.extend(_validate_artifact_files(artifacts, artifact_dir))
+        failures.extend(
+            _validate_artifact_files(
+                artifacts,
+                artifact_dir,
+                resolved_commit=payload.get("resolved_completion_commit"),
+            )
+        )
     return failures
 
 
@@ -850,6 +895,7 @@ def _validate_package_transition(
     payload: Mapping[str, Any],
     *,
     handoff: bool,
+    repo_root: Path | None = None,
 ) -> list[str]:
     failures: list[str] = []
     current = str(payload.get("current_package"))
@@ -885,6 +931,16 @@ def _validate_package_transition(
         failures.append("COMPLETE cannot have NOT_RUN verdict")
     if status == "IN_PROGRESS" and verdict == "PASS":
         failures.append("IN_PROGRESS cannot have PASS verdict")
+    commit_state = payload.get("checkpoint_commit_state")
+    if (
+        not handoff
+        and status == "COMPLETE"
+        and verdict == "PASS"
+        and commit_state != "READY_TO_COMMIT"
+    ):
+        failures.append("tracked COMPLETE+PASS requires READY_TO_COMMIT")
+    if status == "IN_PROGRESS" and commit_state != "UNCOMMITTED":
+        failures.append("IN_PROGRESS requires UNCOMMITTED checkpoint")
     completed = _completed_packages(payload.get("package_ledger"))
     try:
         current_index = PACKAGES.index(current)
@@ -896,7 +952,62 @@ def _validate_package_transition(
         expected_completed = list(PACKAGES[:current_index])
     if completed != expected_completed:
         failures.append("package order skipped")
+    if repo_root is not None and not handoff:
+        failures.extend(
+            _validate_committed_predecessor_checkpoint(payload, repo_root)
+        )
     return failures
+
+
+PREDECESSOR_READY_CHECKPOINT_FAILURE = (
+    "previous package lacks a committed READY_TO_COMMIT checkpoint"
+)
+
+
+def _committed_ready_checkpoint(
+    snapshot: Mapping[str, Any] | None,
+    *,
+    package: str,
+    repo_root: Path,
+) -> bool:
+    if snapshot is None:
+        return False
+    parent = _first_parent(repo_root)
+    return (
+        snapshot.get("schema_version") == STATUS_SCHEMA_VERSION
+        and snapshot.get("current_package") == package
+        and snapshot.get("implementation_status") == "COMPLETE"
+        and snapshot.get("package_verdict") == "PASS"
+        and snapshot.get("checkpoint_commit_state") == "READY_TO_COMMIT"
+        and parent is not None
+        and snapshot.get("observed_head") == parent
+    )
+
+
+def _validate_committed_predecessor_checkpoint(
+    payload: Mapping[str, Any],
+    repo_root: Path,
+) -> list[str]:
+    current = str(payload.get("current_package"))
+    try:
+        current_index = PACKAGES.index(current)
+    except ValueError:
+        return []
+    if current_index == 0:
+        return []
+    fail = [PREDECESSOR_READY_CHECKPOINT_FAILURE]
+    try:
+        head_status = load_previous_status(repo_root)
+    except StatusValidationError:
+        return fail
+    predecessor = PACKAGES[current_index - 1]
+    head_package = head_status.get("current_package") if head_status else None
+    expected = current if head_package == current else predecessor
+    if _committed_ready_checkpoint(
+        head_status, package=str(expected), repo_root=repo_root
+    ):
+        return []
+    return fail
 
 
 def _validate_lease_snapshot(
@@ -916,8 +1027,12 @@ def _validate_lease_snapshot(
         failures.append("ACTIVE lease requires one session UUID")
     if status == "COMPLETE" and lease != "RELEASED":
         failures.append("COMPLETE requires RELEASED lease")
-    if status == "IN_PROGRESS" and lease != "ACTIVE":
-        failures.append("IN_PROGRESS requires ACTIVE lease")
+    if status == "IN_PROGRESS":
+        paused = payload.get("package_verdict") in {"HOLD", "BLOCKED"}
+        if paused and lease == "RELEASED" and session_id is None:
+            pass
+        elif lease != "ACTIVE":
+            failures.append("IN_PROGRESS requires ACTIVE lease")
     if handoff and lease == "ACTIVE" and payload.get("current_package") != "E2":
         failures.append("handoff ACTIVE lease is only valid for E2")
     return failures
@@ -959,7 +1074,14 @@ def _validate_offline_cost(payload: Mapping[str, Any], *, handoff: bool) -> list
     return failures
 
 
-def _validate_promotion(payload: Mapping[str, Any], *, handoff: bool) -> list[str]:
+def _validate_promotion(
+    payload: Mapping[str, Any],
+    *,
+    handoff: bool,
+    artifact_dir: Path | None = None,
+    repo_root: Path | None = None,
+    previous_status: Mapping[str, Any] | None = None,
+) -> list[str]:
     promotion = payload.get("d11_promotion_status")
     if promotion != "PASS":
         return []
@@ -971,11 +1093,24 @@ def _validate_promotion(payload: Mapping[str, Any], *, handoff: bool) -> list[st
         return ["promotion PASS requires E2 COMPLETE"]
     if payload.get("package_verdict") != "PASS":
         return ["promotion PASS requires E2 PASS"]
+    if payload.get("checkpoint_commit_state") != "FROZEN_REVIEWED":
+        return ["promotion PASS requires FROZEN_REVIEWED"]
+    if payload.get("worktree_state") != "CLEAN":
+        return ["promotion PASS requires CLEAN worktree"]
+    if payload.get("lease_status") != "RELEASED":
+        return ["promotion PASS requires RELEASED lease"]
+    if not _commit(payload.get("resolved_completion_commit")):
+        return ["promotion PASS requires resolved_completion_commit"]
     artifacts = payload.get("artifacts")
     if not isinstance(artifacts, list):
         return ["promotion PASS requires handoff artifacts"]
     types = {item.get("artifact_type") for item in artifacts if isinstance(item, dict)}
-    required_types = {"forced_live_public", "forced_live_wrapper", "clean_release"}
+    required_types = {
+        "forced_live_public",
+        "forced_live_wrapper",
+        "clean_release",
+        "promotion_report",
+    }
     if not required_types.issubset(types):
         return ["promotion PASS is missing required evidence artifacts"]
     if payload.get("autonomous_live_policy") == "BLOCKER" and (
@@ -983,7 +1118,13 @@ def _validate_promotion(payload: Mapping[str, Any], *, handoff: bool) -> list[st
         or "autonomous_live_wrapper" not in types
     ):
         return ["BLOCKER policy requires autonomous live public/wrapper pair"]
-    return []
+    if artifact_dir is None:
+        return ["promotion PASS requires verified artifact files"]
+    return _validate_promotion_provenance(
+        payload,
+        repo_root=repo_root,
+        previous_status=previous_status,
+    )
 
 
 def _validate_against_repository(
@@ -991,21 +1132,41 @@ def _validate_against_repository(
     repo_root: Path,
 ) -> list[str]:
     commit_state = payload.get("checkpoint_commit_state")
-    resolved = payload.get("resolved_completion_commit")
-    if commit_state == "UNCOMMITTED" and resolved is not None:
-        return ["UNCOMMITTED checkpoint cannot set resolved_completion_commit"]
-    if commit_state != "UNCOMMITTED" and resolved is None:
-        return ["committed checkpoint requires resolved_completion_commit"]
     try:
         observed = observe_checkpoint(repo_root, payload)
     except (OSError, subprocess.CalledProcessError, StatusValidationError):
         return ["cannot observe git worktree"]
     failures: list[str] = []
-    if observed["head"] != payload.get("observed_head"):
+    origin = _git_output(repo_root, "rev-parse", "origin/main", check=False)
+    if origin.returncode == 0:
+        if origin.stdout.strip() != payload.get("observed_origin_main"):
+            failures.append("observed_origin_main does not match origin/main")
+    elif payload.get("observed_origin_main") != payload.get("observed_head"):
+        failures.append(
+            "observed_origin_main must match observed_head without origin/main"
+        )
+    dirty = bool(observed["changed_paths"])
+    worktree_state = payload.get("worktree_state")
+    if commit_state != "READY_TO_COMMIT":
+        if dirty and worktree_state != "DIRTY_EXPECTED":
+            failures.append("dirty worktree must be DIRTY_EXPECTED")
+        if not dirty and worktree_state != "CLEAN":
+            failures.append("clean worktree must be CLEAN")
+    if commit_state == "READY_TO_COMMIT" and not dirty:
+        parent = observed.get("first_parent")
+        if not parent:
+            failures.append("READY_TO_COMMIT clean checkpoint requires a parent commit")
+        elif payload.get("observed_head") != parent:
+            failures.append(
+                "READY_TO_COMMIT observed_head must be first parent of HEAD"
+            )
+    elif observed["head"] != payload.get("observed_head"):
         failures.append("observed_head does not match git HEAD")
-    if observed["origin_main"] != payload.get("observed_origin_main"):
-        failures.append("observed_origin_main does not match origin/main")
-    if observed["unexpected_paths"]:
+    allow_unexpected = (
+        payload.get("implementation_status") == "IN_PROGRESS"
+        and payload.get("package_verdict") in {"HOLD", "BLOCKED"}
+    )
+    if observed["unexpected_paths"] and not allow_unexpected:
         failures.append("unexpected path outside package write-set")
     if observed["checkpoint_fingerprint_sha256"] != payload.get(
         "checkpoint_fingerprint_sha256"
@@ -1022,12 +1183,6 @@ def _validate_against_repository(
     ]
     if declared != observed["fingerprinted_files"]:
         failures.append("fingerprinted_files do not match repository")
-    dirty = bool(observed["changed_paths"])
-    worktree_state = payload.get("worktree_state")
-    if dirty and worktree_state != "DIRTY_EXPECTED":
-        failures.append("dirty worktree must be DIRTY_EXPECTED")
-    if not dirty and worktree_state != "CLEAN":
-        failures.append("clean worktree must be CLEAN")
     ancestor = _git_output(
         repo_root,
         "merge-base",
@@ -1038,28 +1193,19 @@ def _validate_against_repository(
     )
     if ancestor.returncode != 0:
         failures.append("base_head is not an ancestor of HEAD")
-    if commit_state != "UNCOMMITTED":
-        resolved_ancestor = _git_output(
-            repo_root,
-            "merge-base",
-            "--is-ancestor",
-            str(resolved),
-            "HEAD",
-            check=False,
-        )
-        if resolved_ancestor.returncode != 0:
-            failures.append("resolved_completion_commit is not an ancestor of HEAD")
+    derived = observed.get("derived_resolved_completion_commit")
+    if derived is not None:
         base_to_resolved = _git_output(
             repo_root,
             "merge-base",
             "--is-ancestor",
             str(payload["base_head"]),
-            str(resolved),
+            str(derived),
             check=False,
         )
         if base_to_resolved.returncode != 0:
             failures.append(
-                "base_head is not an ancestor of resolved_completion_commit"
+                "base_head is not an ancestor of derived resolved completion commit"
             )
     return failures
 
@@ -1139,11 +1285,61 @@ def _git_blob(repo_root: Path, ref: str, path: str) -> bytes:
     return result.stdout
 
 
+def _validate_changed_files_manifest(payload: Mapping[str, Any]) -> list[str]:
+    files = payload.get("changed_files")
+    fingerprinted = payload.get("fingerprinted_files")
+    if not _changed_file_list(files) or not _fingerprint_file_list(fingerprinted):
+        return []
+    paths = [str(item["path"]) for item in files]
+    if len(paths) != len(set(paths)):
+        return ["changed_files paths are not unique"]
+    status_entries = [item for item in files if item["path"] == STATUS_FILE]
+    if len(status_entries) != 1:
+        return ["changed_files must include STATUS_FILE"]
+    declared = {(item["path"], item["state"]) for item in files}
+    expected = {(item["path"], item["state"]) for item in fingerprinted}
+    expected.add((STATUS_FILE, str(status_entries[0]["state"])))
+    if declared != expected:
+        return ["changed_files do not match fingerprinted_files"]
+    return []
+
+
+def _validate_promotion_provenance(
+    payload: Mapping[str, Any],
+    *,
+    repo_root: Path | None,
+    previous_status: Mapping[str, Any] | None,
+) -> list[str]:
+    if repo_root is None:
+        return ["promotion PASS requires git repository"]
+    if not isinstance(previous_status, dict):
+        return ["promotion PASS requires committed E1 checkpoint"]
+    if previous_status.get("current_package") != "E1":
+        return ["promotion PASS requires committed E1 checkpoint"]
+    if previous_status.get("implementation_status") != "COMPLETE":
+        return ["promotion PASS requires E1 COMPLETE+PASS"]
+    if previous_status.get("package_verdict") != "PASS":
+        return ["promotion PASS requires E1 COMPLETE+PASS"]
+    if previous_status.get("next_allowed_package") != "E2":
+        return ["promotion PASS requires E1 next_allowed_package E2"]
+    try:
+        head = _git_output(repo_root, "rev-parse", "HEAD").strip()
+    except (OSError, subprocess.CalledProcessError, StatusValidationError):
+        return ["promotion PASS requires git HEAD"]
+    if head != payload.get("resolved_completion_commit"):
+        return ["resolved_completion_commit does not match git HEAD"]
+    return []
+
+
 def _validate_artifact_files(
     artifacts: Sequence[Mapping[str, Any]],
     artifact_dir: Path,
+    *,
+    resolved_commit: Any = None,
 ) -> list[str]:
     failures: list[str] = []
+    bodies: list[tuple[Mapping[str, Any], bytes]] = []
+    digest_by_type: dict[str, str] = {}
     for item in artifacts:
         filename = str(item.get("filename", ""))
         if not BASENAME_RE.fullmatch(filename):
@@ -1159,24 +1355,93 @@ def _validate_artifact_files(
         digest = hashlib.sha256(data).hexdigest()
         if digest != item.get("sha256"):
             failures.append("handoff artifact digest does not match file")
-        artifact_type = str(item.get("artifact_type"))
+        artifact_type = str(item["artifact_type"])
+        digest_by_type[artifact_type] = digest
         cap = ARTIFACT_SIZE_CAPS.get(artifact_type, LIVE_EVIDENCE_MAX_BYTES)
         if len(data) > cap:
             failures.append("handoff artifact file exceeds registered cap")
+        bodies.append((item, data))
+    for item, data in bodies:
+        failures.extend(
+            _validate_artifact_payload(
+                str(item["artifact_type"]),
+                data,
+                resolved_commit=resolved_commit,
+                digest_by_type=digest_by_type,
+            )
+        )
+    return failures
+
+
+def _validate_artifact_payload(
+    artifact_type: str,
+    data: bytes,
+    *,
+    resolved_commit: Any,
+    digest_by_type: Mapping[str, str],
+) -> list[str]:
+    try:
+        payload = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return ["handoff artifact is not JSON"]
+    if not isinstance(payload, dict):
+        return ["handoff artifact must be a JSON object"]
+    failures: list[str] = []
+    if artifact_type == "promotion_report":
+        if payload.get("evaluated_commit") != resolved_commit:
+            failures.append(
+                "promotion report evaluated_commit does not match resolved commit"
+            )
+        if payload.get("promotion_status") not in PROMOTION_STATUSES:
+            failures.append("promotion report status is invalid")
+    elif artifact_type in {"forced_live_public", "autonomous_live_public"}:
+        if not payload.get("schema_version"):
+            failures.append("live public schema_version is missing")
+        if payload.get("evaluated_commit") != resolved_commit:
+            failures.append(
+                "live public evaluated_commit does not match resolved commit"
+            )
+    elif artifact_type in {"forced_live_wrapper", "autonomous_live_wrapper"}:
+        public_type = (
+            "forced_live_public"
+            if artifact_type == "forced_live_wrapper"
+            else "autonomous_live_public"
+        )
+        if payload.get("evaluated_commit") != resolved_commit:
+            failures.append(
+                "live wrapper evaluated_commit does not match resolved commit"
+            )
+        public_digest = digest_by_type.get(public_type)
+        if (
+            public_digest is not None
+            and payload.get("public_artifact_sha256") != public_digest
+        ):
+            failures.append("live wrapper public digest does not match artifact file")
+    elif artifact_type == "clean_release":
+        if payload.get("commit") != resolved_commit:
+            failures.append("clean release commit does not match resolved commit")
     return failures
 
 
 def _completed_packages(ledger: Any) -> list[str]:
-    completed: list[str] = []
+    latest: dict[str, Mapping[str, Any]] = {}
+    order: list[str] = []
     if not isinstance(ledger, list):
-        return completed
+        return []
     for entry in ledger:
         if not isinstance(entry, dict):
             continue
+        package = entry.get("package")
+        if package not in PACKAGES:
+            continue
+        if package not in latest:
+            order.append(str(package))
+        latest[str(package)] = entry
+    completed: list[str] = []
+    for package in order:
+        entry = latest[package]
         if entry.get("status") == "COMPLETE" and entry.get("verdict") == "PASS":
-            package = entry.get("package")
-            if package in PACKAGES and package not in completed:
-                completed.append(str(package))
+            completed.append(package)
     return completed
 
 
@@ -1346,6 +1611,16 @@ def _contains_raw_payload_marker(value: Any) -> bool:
     if isinstance(value, dict):
         return any(_contains_raw_payload_marker(item) for item in value.values())
     return False
+
+
+def _first_parent(repo_root: Path) -> str | None:
+    result = _git_output(repo_root, "rev-parse", "HEAD^", check=False)
+    if result.returncode != 0:
+        return None
+    parent = result.stdout.strip()
+    if not _commit(parent):
+        return None
+    return parent
 
 
 def _git_status_paths(repo_root: Path) -> tuple[str, ...]:
