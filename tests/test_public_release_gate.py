@@ -391,6 +391,22 @@ def test_d11_eval_artifact_check_reports_missing_tool_sop(tmp_path) -> None:
     assert "docs/tool_sop.md is missing or unreadable" in failures
 
 
+def test_final_release_checklist_documents_full_promotion_command() -> None:
+    checklist = Path("docs/release_checklist.md").read_text(encoding="utf-8")
+    command = _promotion_command_from_checklist(checklist)
+
+    assert command["script"] == "scripts/run_eval_gate.py"
+    assert command["--live-evidence"] == "../agent-coach-live-wrapper.json"
+    assert (
+        command["--clean-release-evidence"]
+        == "../agent-coach-clean-release-evidence.json"
+    )
+    assert command["--require-promotion"] is True
+    assert command["--output"] == "../agent-coach-d11-promotion-report.json"
+    for flag in ("--live-evidence", "--clean-release-evidence", "--output"):
+        assert command[flag].startswith("../")
+
+
 def _write_required_files(root: Path) -> None:
     for directory in ("docs", "contracts"):
         (root / directory).mkdir(parents=True, exist_ok=True)
@@ -433,6 +449,23 @@ def _write_required_files(root: Path) -> None:
     (root / "contracts" / "export_manifest.json").write_text("{}\n", encoding="utf-8")
     (root / "scripts").mkdir(exist_ok=True)
     (root / "scripts" / "run_live_eval.py").write_text("# live eval\n")
+
+
+def _promotion_command_from_checklist(text: str) -> dict[str, object]:
+    prefix = "python scripts/run_eval_gate.py --live-evidence "
+    line = next(line for line in text.splitlines() if line.startswith(prefix))
+    parts = line.split()
+    parsed: dict[str, object] = {"script": parts[1]}
+    index = 2
+    while index < len(parts):
+        flag = parts[index]
+        if flag == "--require-promotion":
+            parsed[flag] = True
+            index += 1
+            continue
+        parsed[flag] = parts[index + 1]
+        index += 2
+    return parsed
 
 
 def _init_git(root: Path) -> None:

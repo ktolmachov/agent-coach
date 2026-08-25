@@ -203,6 +203,15 @@ marker-only or string-only suite/evidence JSON is rejected. Live scores below
 80% block promotion without changing offline `gate_status`; promotion evidence
 args or `--require-promotion` make `promotion_status` drive the CLI exit code.
 
+After the reviewed commit has a valid external live wrapper and external
+clean-release evidence, run the full promotion gate:
+
+```bash
+python scripts/run_eval_gate.py --live-evidence ../agent-coach-live-wrapper.json --clean-release-evidence ../agent-coach-clean-release-evidence.json --require-promotion --output ../agent-coach-d11-promotion-report.json
+```
+
+Without real evidence, `promotion_status: HOLD` is the expected safe result.
+
 Run the full public check sequence:
 
 ```bash

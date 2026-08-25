@@ -79,6 +79,16 @@ drive the CLI exit code, and promotion-mode reports must be written outside the
 checkout. `--print-tool-sop` prints the generated SOP and fails on committed
 snapshot drift without echoing local checkout paths.
 
+The final copy-paste promotion command, after valid external live-wrapper and
+clean-release evidence have been captured, is:
+
+```bash
+python scripts/run_eval_gate.py --live-evidence ../agent-coach-live-wrapper.json --clean-release-evidence ../agent-coach-clean-release-evidence.json --require-promotion --output ../agent-coach-d11-promotion-report.json
+```
+
+If either evidence file is missing or invalid, the expected result remains
+`promotion_status: HOLD`; do not create placeholder evidence.
+
 The opt-in live eval runner freezes five public synthetic live-provider cases.
 `--scripted` validates the runner with the deterministic Responses test client
 and is not live evidence. Actual live collection requires both

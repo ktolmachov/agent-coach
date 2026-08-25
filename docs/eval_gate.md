@@ -22,6 +22,16 @@ Require full promotion evidence:
 python scripts/run_eval_gate.py --require-promotion
 ```
 
+Full final promotion check, after the reviewed commit has valid external live
+wrapper and clean-release evidence:
+
+```bash
+python scripts/run_eval_gate.py --live-evidence ../agent-coach-live-wrapper.json --clean-release-evidence ../agent-coach-clean-release-evidence.json --require-promotion --output ../agent-coach-d11-promotion-report.json
+```
+
+When the real evidence files are unavailable, the expected result remains
+`promotion_status: HOLD`; do not replace them with marker files.
+
 The report includes schema version, commit, dirty flag, profile, contract hash,
 suite version/hash, provenance, corpus hash, thresholds, per-case results, KPI
 metrics and limitations. If Git HEAD cannot be read, promotion is blocked with

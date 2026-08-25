@@ -58,6 +58,16 @@ registered commands `python -m pytest`,
 `python scripts/check_public_release.py --release` and
 `python scripts/run_eval_gate.py`.
 
+After clean evidence capture, run the final promotion gate with only external
+evidence/report paths:
+
+```bash
+python scripts/run_eval_gate.py --live-evidence ../agent-coach-live-wrapper.json --clean-release-evidence ../agent-coach-clean-release-evidence.json --require-promotion --output ../agent-coach-d11-promotion-report.json
+```
+
+If the live wrapper or clean-release evidence is unavailable, the expected
+promotion result is `HOLD`; do not fabricate evidence to obtain `PASS`.
+
 The release tag is created only after explicit maintainer approval.
 
 ## Public Safety Review
