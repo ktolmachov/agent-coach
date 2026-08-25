@@ -1,9 +1,9 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:50:15Z",
+  "updated_at_utc": "2026-08-25T16:58:16Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
   "base_head": "a846c5d764cc2b68dfef8a5d5b86166b01299d4d",
-  "observed_head": "a846c5d764cc2b68dfef8a5d5b86166b01299d4d",
+  "observed_head": "a1cfad735a54409a024902af15bcb667a3983195",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
@@ -366,6 +366,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "20476eee9e0e18057a828e1127d667436139a603ce0ca38262b9438cc87802fd",
       "entry_sha256": "df0354decc05ee5f230a351802262b1290081159c892e3a304037771336bdc20"
+    },
+    {
+      "package": "E1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "a1cfad735a54409a024902af15bcb667a3983195",
+      "completed_at_utc": "2026-08-25T16:58:16Z",
+      "evidence_summary": "Recorded post-merge main checkpoint after fast-forwarding D11 offline remediation; autonomous harness checks remain PASS.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "df0354decc05ee5f230a351802262b1290081159c892e3a304037771336bdc20",
+      "entry_sha256": "6e1d78e88f08c6c8cf613380b1f51bbf69c3d5adca03e3b766c0ec7b7d53f65a"
     }
   ]
 }
