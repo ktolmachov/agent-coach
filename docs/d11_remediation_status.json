@@ -1,17 +1,17 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T17:29:43Z",
+  "updated_at_utc": "2026-08-25T19:34:11Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "49b28a7cd6264f5affe08d0a3671af32622449c4",
-  "observed_head": "49b28a7cd6264f5affe08d0a3671af32622449c4",
-  "observed_origin_main": "d764927d52430a4029e5bcbc02dab1cd43c22547",
+  "base_head": "0feadb4b678d638c338318467a8a891128c6eef2",
+  "observed_head": "0feadb4b678d638c338318467a8a891128c6eef2",
+  "observed_origin_main": "0feadb4b678d638c338318467a8a891128c6eef2",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "a1bec73860d3821791f056761448678d1d85b274d2addc446c43b3b444d05dd9",
+  "checkpoint_fingerprint_sha256": "0c6ad8451948486b72a2144236f81430c76bce580f88a09b54fdeb8a89c6a357",
   "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T16:50:15Z",
+  "session_started_at_utc": "2026-08-25T19:34:11Z",
   "lease_status": "RELEASED",
   "current_package": "E1",
   "implementation_status": "COMPLETE",
@@ -22,75 +22,44 @@
   "changed_files": [
     {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package E1 corrective READY_TO_COMMIT checkpoint after line-ending fingerprint normalization.",
+      "purpose": "Record E1 READY_TO_COMMIT checkpoint after external live promotion gate contract fix.",
       "state": "MODIFY"
     }
   ],
   "checks_passed": [
     {
       "id": "autonomous_harness_suite",
-      "command": "python -m pytest tests/test_live_eval_runner.py tests/test_eval_gate.py -p no:cacheprovider",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "autonomous_scripted_cli",
-      "command": "python scripts/run_live_eval.py --autonomous --scripted",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "offline_eval_gate",
-      "command": "python scripts/run_eval_gate.py",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "public_release",
-      "command": "python scripts/check_public_release.py",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "strict_public_release",
-      "command": "python scripts/check_public_release.py --release",
+      "command": "python -m pytest tests/test_eval_gate.py tests/test_live_eval_runner.py",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
       "id": "ruff_touched_python",
-      "command": "python -m ruff check src/agent_coach/eval/live_evidence.py src/agent_coach/eval/gate.py scripts/run_live_eval.py tests/test_live_eval_runner.py tests/test_eval_gate.py",
+      "command": "python -m ruff check src/agent_coach/eval/gate.py tests/test_eval_gate.py",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
       "id": "compileall_touched_python",
-      "command": "python -m compileall -q src/agent_coach/eval/live_evidence.py src/agent_coach/eval/gate.py scripts/run_live_eval.py tests/test_live_eval_runner.py tests/test_eval_gate.py",
-      "platform": "win32/Windows",
-      "result": "PASS"
-    },
-    {
-      "id": "git_diff_check",
-      "command": "git diff --check",
+      "command": "python -m compileall -q src/agent_coach/eval/gate.py tests/test_eval_gate.py",
       "platform": "win32/Windows",
       "result": "PASS"
     }
   ],
   "checks_not_run": [
     "full_pytest_suite",
-    "live_provider_eval",
-    "fresh_clone_clean_release",
-    "d11_promotion_gate"
+    "live_provider_eval_on_new_checkpoint",
+    "clean_release_evidence_on_new_checkpoint",
+    "d11_promotion_gate_on_clean_checkpoint"
   ],
   "remaining_risks": [
-    "E1 scripted autonomous validation proves runner and schema behavior only, not live model accuracy.",
-    "Current policy is DOCUMENTED_LIMITATION, so autonomous evidence is reported separately and does not block promotion.",
-    "D11 promotion remains HOLD pending E2 live and clean-release evidence."
+    "E2 live and clean-release evidence must be regenerated on the new reviewed checkpoint commit.",
+    "D11 promotion remains HOLD until external E2 evidence passes on a clean HEAD."
   ],
   "blockers": [],
   "last_completed_package": "E1",
   "next_allowed_package": "E2",
-  "exact_resume_instruction": "On clean HEAD after committing this E1 corrective READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then perform Package E2 by creating external forced live evidence and clean-release evidence for the reviewed commit. Do not edit tracked STATUS_FILE for E2; use the handoff artifact protocol.",
+  "exact_resume_instruction": "After committing this E1 READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then rerun Package E2 with external live, wrapper, clean-release and promotion evidence on the new clean HEAD.",
   "package_ledger": [
     {
       "package": "A",
@@ -388,6 +357,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "6e1d78e88f08c6c8cf613380b1f51bbf69c3d5adca03e3b766c0ec7b7d53f65a",
       "entry_sha256": "1659f6b5007af89347736736a3c6aaa219010d9a1f6f8983a02f6d9896527b0c"
+    },
+    {
+      "package": "E1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "0feadb4b678d638c338318467a8a891128c6eef2",
+      "completed_at_utc": "2026-08-25T19:34:11Z",
+      "evidence_summary": "Recorded E1 corrective checkpoint for external live-wrapper promotion gate support; E2 remains next and promotion HOLD.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "1659f6b5007af89347736736a3c6aaa219010d9a1f6f8983a02f6d9896527b0c",
+      "entry_sha256": "345d459a2ac0aeda3bd0fdbbdc55118ef04de53833a126b27e4167d68b0b4b63"
     }
   ]
 }
