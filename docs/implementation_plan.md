@@ -842,6 +842,13 @@ D11 micro-slice evidence:
   valid and above promotion thresholds; accepted evidence provenance, public
   artifact labels/digests and command records remain in the final report;
   minimal marker-only, string-only or oversized evidence files are invalid.
+- D0 eval v2 discovery freezes an executable proposed registry of 47 cases:
+  the current 27-case suite plus 20 proposed additions covering nine declared
+  retrieval negatives, two reproducible near-threshold retrieval positives,
+  three prompt-injection/security probes that do not duplicate current denylist
+  literals, three exact runtime budget stop reasons including positive offline
+  `estimated_cost_usd` for MAX_COST, and three scripted provider-contract
+  fail-closed cases. No D8 corpus mutation is part of this discovery.
 
 Non-goals:
 
