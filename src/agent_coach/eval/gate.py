@@ -1291,6 +1291,7 @@ def _load_live_evidence(
         )
     artifact_failure = _verify_public_evidence_artifacts(
         artifacts,
+        wrapper_path=path,
         expected_case_count=case_count,
         expected_task_success_rate=task_success_rate,
     )
@@ -1528,12 +1529,13 @@ def _public_evidence_artifacts(value: object) -> list[dict[str, str]] | None:
 def _verify_public_evidence_artifacts(
     artifacts: Sequence[Mapping[str, str]],
     *,
+    wrapper_path: Path,
     expected_case_count: int,
     expected_task_success_rate: float,
 ) -> str | None:
     for artifact in artifacts:
         label = artifact["label"]
-        artifact_path = REPO_ROOT / Path(label)
+        artifact_path = _public_evidence_artifact_path(label, wrapper_path)
         try:
             data = read_limited_live_eval_public_bytes(artifact_path)
         except OSError:
@@ -1543,7 +1545,9 @@ def _verify_public_evidence_artifacts(
         digest = hashlib.sha256(data).hexdigest()
         if digest != artifact["sha256"]:
             return f"public evidence artifact digest mismatch: {label}"
-        if _git_output("ls-files", "--error-unmatch", "--", label) != label:
+        if _public_evidence_label_is_repo_local(label) and (
+            _git_output("ls-files", "--error-unmatch", "--", label) != label
+        ):
             return f"public evidence artifact is not tracked: {label}"
         try:
             public_payload = json.loads(data.decode("utf-8"))
@@ -1574,9 +1578,24 @@ def _public_evidence_label(value: object) -> str | None:
     path = Path(label)
     if path.is_absolute() or ".." in path.parts:
         return None
-    if path.parts[:2] != ("docs", "evidence") or path.suffix != ".json":
+    if path.suffix != ".json":
         return None
-    return label
+    if _public_evidence_label_is_repo_local(label):
+        return label
+    if len(path.parts) == 1:
+        return label
+    return None
+
+
+def _public_evidence_label_is_repo_local(label: str) -> bool:
+    path = Path(label)
+    return path.parts[:2] == ("docs", "evidence")
+
+
+def _public_evidence_artifact_path(label: str, wrapper_path: Path) -> Path:
+    if _public_evidence_label_is_repo_local(label):
+        return REPO_ROOT / Path(label)
+    return wrapper_path.resolve().parent / label
 
 
 def _sha256_hex(value: object) -> str | None:

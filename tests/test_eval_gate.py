@@ -309,6 +309,56 @@ def test_valid_evidence_provenance_is_reported(
     }
 
 
+def test_external_live_wrapper_resolves_public_artifact_next_to_wrapper(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "agent_coach.eval.gate._git_output",
+        _fake_clean_git,
+    )
+    monkeypatch.setattr("agent_coach.eval.gate._git_status_short", lambda: ("", True))
+    monkeypatch.setattr("agent_coach.eval.gate.REPO_ROOT", tmp_path / "checkout")
+    seed_artifact = _write_valid_public_artifact(tmp_path / "seed")
+    external_artifact = tmp_path / "agent-coach-forced-live-public.json"
+    external_artifact.write_bytes(seed_artifact.read_bytes())
+    wrapper = tmp_path / "agent-coach-live-wrapper.json"
+    wrapper.write_text(
+        json.dumps(
+            {
+                "schema_version": "agent-coach-live-eval-evidence/1.0.0",
+                "provenance": gate.EXPECTED_LIVE_EVIDENCE_PROVENANCE,
+                "commit": "clean-head",
+                "profile": "live_provider",
+                "provider_profile_opt_in": True,
+                "checked_at_utc": "2026-08-24T00:00:00Z",
+                "case_count": 5,
+                "task_success_rate": 1.0,
+                "evidence_artifacts": [
+                    {
+                        "label": "agent-coach-forced-live-public.json",
+                        "sha256": sha256(external_artifact.read_bytes()).hexdigest(),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = run_eval_suite(
+        live_evidence_path=wrapper,
+        clean_release_evidence_path=_valid_clean_evidence(tmp_path),
+    )
+
+    assert report["promotion_status"] == "PASS"
+    assert report["live_evidence"]["evidence_artifacts"] == [
+        {
+            "label": "agent-coach-forced-live-public.json",
+            "sha256": sha256(external_artifact.read_bytes()).hexdigest(),
+        }
+    ]
+
+
 def test_live_evidence_rejects_missing_mismatched_and_untracked_public_artifact(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
