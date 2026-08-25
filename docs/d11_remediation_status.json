@@ -1,55 +1,14 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:11:00Z",
+  "updated_at_utc": "2026-08-25T16:12:15Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "2c35196a406dda95c7220a0a5e3cc8c3901f7bd0",
-  "observed_head": "2c35196a406dda95c7220a0a5e3cc8c3901f7bd0",
+  "base_head": "d243398ced0ca6c469db39bdd724edf0b4e49129",
+  "observed_head": "d243398ced0ca6c469db39bdd724edf0b4e49129",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "bf762110129d5a99bc7c5ea0f38e1e0e653346144eabfdebce06bcbfdce60ef2",
-  "fingerprinted_files": [
-    {
-      "path": "README.md",
-      "sha256": "e4dbe54ae5b3344ef33b0b9728948e7ca657edad598b3e9ae8422d1763c6cb47",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/eval_gate.md",
-      "sha256": "9b8ffee07d3bb731494160bef765358dc91e99db8c5f05a245a7aa84ee1f0531",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/implementation_plan.md",
-      "sha256": "86a577b7136a6b87cef729008e9625aa17404f7744c05d0ec7888140227bdab0",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/live_profile.md",
-      "sha256": "edf8e38d2e44230fe2fb714c7c5bbab4714aaa0e592210be6866bed8e5860eb5",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/review_kit.md",
-      "sha256": "708f4d5c26a2fa9af6e3a7a87be579279b6b6204636dc3484760457d54cf2861",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/tool_sop.md",
-      "sha256": "b3946f96b9f5b93c8a6d734801d4ccecba7202d0994edcdf89ef1d17995ee4e0",
-      "state": "MODIFY"
-    },
-    {
-      "path": "src/agent_coach/eval/gate.py",
-      "sha256": "290883fdb681098a135f2ebe199e59bf34a7baa9d842ffccd487391f5fb06d0b",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_eval_gate.py",
-      "sha256": "5e21a83988bb33197e785b53f646686cf6e444b20b6e85913bc0d860415c9050",
-      "state": "MODIFY"
-    }
-  ],
+  "checkpoint_fingerprint_sha256": "86cc6579dda6e84d959fea1ac549038e605e0cc169e7c7d7ec1d24827e9a5be1",
+  "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
   "session_started_at_utc": "2026-08-25T16:07:54Z",
@@ -62,48 +21,8 @@
   "provider_cost_status": "zero",
   "changed_files": [
     {
-      "path": "README.md",
-      "purpose": "Clarify forced live evidence is not autonomous planner accuracy.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/eval_gate.md",
-      "purpose": "Document forced-grounding thresholds and SOP declared/global/effective caps.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/implementation_plan.md",
-      "purpose": "Record C1 threshold/SOP honesty in D11 plan.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/live_profile.md",
-      "purpose": "Separate D9 live profile behavior from D11 forced/autonomous promotion evidence.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/review_kit.md",
-      "purpose": "Clarify live score is forced-grounding evidence, not planner accuracy.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/tool_sop.md",
-      "purpose": "Regenerate Tool SOP snapshot with negative registry and effective caps.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "src/agent_coach/eval/gate.py",
-      "purpose": "Generate SOP from ToolSpec plus negative registry and effective result cap calculation.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_eval_gate.py",
-      "purpose": "Cover SOP negative registry and declared/global/effective cap wording.",
-      "state": "MODIFY"
-    },
-    {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package C1 COMPLETE+PASS READY_TO_COMMIT checkpoint.",
+      "purpose": "Record Package C1 corrective READY_TO_COMMIT checkpoint after line-ending fingerprint normalization.",
       "state": "MODIFY"
     }
   ],
@@ -140,6 +59,7 @@
     "d11_promotion_gate"
   ],
   "remaining_risks": [
+    "C1 required a status-only corrective commit because Markdown line-ending normalization changed committed blob hashes.",
     "C1 does not create autonomous live evidence; DOCUMENTED_LIMITATION remains in force until E1/E2 handoff.",
     "D11 promotion remains HOLD pending E2 live and clean-release evidence.",
     "No provider network or live evidence was run in C1."
@@ -147,7 +67,7 @@
   "blockers": [],
   "last_completed_package": "C1",
   "next_allowed_package": "C2",
-  "exact_resume_instruction": "On clean HEAD after committing this C1 READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then start Package C2. Do not run provider network or E2 live evidence.",
+  "exact_resume_instruction": "On clean HEAD after committing this C1 corrective READY_TO_COMMIT status checkpoint, verify scripts/check_d11_remediation_status.py, then start Package C2. Do not run provider network or E2 live evidence.",
   "package_ledger": [
     {
       "package": "A",
@@ -302,6 +222,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "6b918acc825f686d40e1dc8ae186e70f8e245f98037da8cbc12da5688d3051ae",
       "entry_sha256": "1e3e981b94ee1fde654201af26ca9ad267e68c83941a2460e67a5e1f044e6634"
+    },
+    {
+      "package": "C1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "d243398ced0ca6c469db39bdd724edf0b4e49129",
+      "completed_at_utc": "2026-08-25T16:12:15Z",
+      "evidence_summary": "Corrected C1 status checkpoint after clean-head validator exposed Markdown line-ending fingerprint normalization; C1 checks remain PASS.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "1e3e981b94ee1fde654201af26ca9ad267e68c83941a2460e67a5e1f044e6634",
+      "entry_sha256": "8df40d79b0ccd00dd190212dbeaa8b5236d77cde19170e39832ec2043a52bb96"
     }
   ]
 }
