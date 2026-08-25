@@ -1,25 +1,19 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:04:43Z",
+  "updated_at_utc": "2026-08-25T16:06:51Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "341e1405db95f6112964d287ed94287f9d4a83db",
-  "observed_head": "341e1405db95f6112964d287ed94287f9d4a83db",
+  "base_head": "812318a217523991e5f7e78aeb3b22a17e1770ad",
+  "observed_head": "812318a217523991e5f7e78aeb3b22a17e1770ad",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "235eef3eea0b110304e443fb23779bafd228a2c4099b51e5b56ed43d77da07ca",
-  "fingerprinted_files": [
-    {
-      "path": "docs/evidence/historical/live-eval-public.json",
-      "sha256": "1954b49cf639cf1e1e9f86240ba5b48f6a051303a3e1a030f9b4922c2603b8e8",
-      "state": "MODIFY"
-    }
-  ],
+  "checkpoint_fingerprint_sha256": "441203192aa6d7fc5fcda64466cdbbde50bd58650dc29154d7dd2201739f574e",
+  "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T16:00:47Z",
+  "session_started_at_utc": "2026-08-25T16:06:08Z",
   "lease_status": "RELEASED",
-  "current_package": "B1",
+  "current_package": "B2",
   "implementation_status": "COMPLETE",
   "package_verdict": "PASS",
   "d11_promotion_status": "HOLD",
@@ -27,26 +21,21 @@
   "provider_cost_status": "zero",
   "changed_files": [
     {
-      "path": "docs/evidence/historical/live-eval-public.json",
-      "purpose": "Compact the tracked historical live artifact so Git and the validator treat it as an explicit historical ADD/MODIFY boundary, not current promotion evidence.",
-      "state": "MODIFY"
-    },
-    {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package B1 corrective READY_TO_COMMIT checkpoint.",
+      "purpose": "Record Package B2 COMPLETE+PASS READY_TO_COMMIT checkpoint.",
       "state": "MODIFY"
     }
   ],
   "checks_passed": [
     {
-      "id": "live_registry_suite",
-      "command": "python -m pytest tests/test_live_eval_runner.py tests/test_public_release_gate.py -p no:cacheprovider",
+      "id": "provenance_negative_suite",
+      "command": "python -m pytest tests/test_live_eval_runner.py -p no:cacheprovider",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
-      "id": "historical_classification_suite",
-      "command": "python -m pytest tests/test_live_eval_runner.py tests/test_public_release_gate.py -p no:cacheprovider",
+      "id": "promotion_gate_suite",
+      "command": "python -m pytest tests/test_eval_gate.py -p no:cacheprovider",
       "platform": "win32/Windows",
       "result": "PASS"
     },
@@ -57,8 +46,26 @@
       "result": "PASS"
     },
     {
+      "id": "ruff_touched_python",
+      "command": "python -m ruff check scripts/run_live_eval.py src/agent_coach/eval/gate.py tests/test_live_eval_runner.py tests/test_eval_gate.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "compileall_touched_python",
+      "command": "python -m compileall -q scripts/run_live_eval.py src/agent_coach/eval/gate.py tests/test_live_eval_runner.py tests/test_eval_gate.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
       "id": "status_validator_cli",
       "command": "python scripts/check_d11_remediation_status.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "git_diff_check",
+      "command": "git diff --check",
       "platform": "win32/Windows",
       "result": "PASS"
     }
@@ -70,15 +77,14 @@
     "d11_promotion_gate"
   ],
   "remaining_risks": [
-    "B1 required a corrective commit because the first B1 checkpoint was rejected by clean-head validator rename fingerprinting.",
+    "B2 made no code changes because causal wrapper and promotion gate behavior were already present and verified from the current tree.",
     "D11 promotion remains HOLD pending E2 live and clean-release evidence.",
-    "No provider network or live evidence was run in B1.",
-    "docs/release_checklist.md C2 wording remains deferred because it is outside the B1 validator write-set."
+    "No provider network or live evidence was run in B2."
   ],
   "blockers": [],
-  "last_completed_package": "B1",
-  "next_allowed_package": "B2",
-  "exact_resume_instruction": "On clean HEAD after committing this B1 corrective READY_TO_COMMIT snapshot, verify scripts/check_d11_remediation_status.py, then start Package B2. Do not run provider network or E2 live evidence.",
+  "last_completed_package": "B2",
+  "next_allowed_package": "C1",
+  "exact_resume_instruction": "On clean HEAD after committing this B2 READY_TO_COMMIT status checkpoint, verify scripts/check_d11_remediation_status.py, then start Package C1. Do not run provider network or E2 live evidence.",
   "package_ledger": [
     {
       "package": "A",
@@ -189,6 +195,28 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "9d98cf5cb3c01c172ed153f1a20b56e18a37585543b875c22a344afa56ccb68e",
       "entry_sha256": "9c5028a7de057be4c726d79dad2bc4ae5b428b345e1dd35f1b7762d979349c0c"
+    },
+    {
+      "package": "B2",
+      "status": "IN_PROGRESS",
+      "verdict": "HOLD",
+      "observed_head": "812318a217523991e5f7e78aeb3b22a17e1770ad",
+      "completed_at_utc": "2026-08-25T16:06:08Z",
+      "evidence_summary": "Acquired B2 lease; existing causal wrapper and promotion gate tests are being verified.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "9c5028a7de057be4c726d79dad2bc4ae5b428b345e1dd35f1b7762d979349c0c",
+      "entry_sha256": "17c50de060c196a77bd587944490336e8c5e033f7a1968c1e21b7c967c2bf190"
+    },
+    {
+      "package": "B2",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "812318a217523991e5f7e78aeb3b22a17e1770ad",
+      "completed_at_utc": "2026-08-25T16:06:51Z",
+      "evidence_summary": "Verified B2 wrapper and promotion gate provenance behavior with focused offline tests; no code changes were required beyond status checkpoint.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "17c50de060c196a77bd587944490336e8c5e033f7a1968c1e21b7c967c2bf190",
+      "entry_sha256": "0bcae30934b2b1c91d45b49d20e04101ba32b9ad14b4c30da6d953e0544208c6"
     }
   ]
 }
