@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import socket
 import subprocess
+from typing import Any
 
 from scripts import run_acceptance_demo as acceptance
 
@@ -343,6 +345,80 @@ def test_evidence_hash_is_stable_and_sensitive_to_projection_changes() -> None:
     assert len(first) == 64
 
 
+def test_reproducibility_failure_names_accepted_response_branch(monkeypatch) -> None:
+    accepted = {
+        "run_id": "run-1",
+        "polling_url": "/v1/runs/run-1",
+        "state": "queued",
+    }
+    completed = _completed_projection_payload()
+    leak = "unique_payload_marker_should_not_appear_in_summary"
+
+    def fake_http(port, path, method="GET", payload=None, headers=None):
+        del port, method, payload, headers
+        if path == "/v1/runs":
+            return {**accepted, "state": "completed", "marker": leak}
+        return completed
+
+    monkeypatch.setattr(acceptance, "_http_json", fake_http)
+    step = acceptance._verify_reproducibility_and_tool_args(
+        port=1,
+        completed_cases=[
+            acceptance.CompletedDemoCase(
+                spec=acceptance.CONTRAST_CASES[0],
+                accepted=accepted,
+                completed=completed,
+            )
+        ],
+        advertised_tools=[{"name": "rag.search"}],
+    )
+
+    assert step.status == "FAIL"
+    assert "same_accepted_response=false" in step.summary
+    assert "same_result_projection=false" not in step.summary
+    assert "changed_keys=" in step.summary
+    assert leak not in step.summary
+    assert json.dumps(accepted) not in step.summary
+
+
+def test_reproducibility_failure_names_result_projection_branch(monkeypatch) -> None:
+    accepted = {
+        "run_id": "run-1",
+        "polling_url": "/v1/runs/run-1",
+        "state": "queued",
+    }
+    completed = _completed_projection_payload()
+    replayed = _completed_projection_payload(answer_status="abstain")
+    leak = "unique_projection_marker_should_not_appear_in_summary"
+    replayed["result"]["answer"] = leak
+
+    def fake_http(port, path, method="GET", payload=None, headers=None):
+        del port, method, payload, headers
+        if path == "/v1/runs":
+            return accepted
+        return replayed
+
+    monkeypatch.setattr(acceptance, "_http_json", fake_http)
+    step = acceptance._verify_reproducibility_and_tool_args(
+        port=1,
+        completed_cases=[
+            acceptance.CompletedDemoCase(
+                spec=acceptance.CONTRAST_CASES[0],
+                accepted=accepted,
+                completed=completed,
+            )
+        ],
+        advertised_tools=[{"name": "rag.search"}],
+    )
+
+    assert step.status == "FAIL"
+    assert "same_result_projection=false" in step.summary
+    assert "same_accepted_response=false" not in step.summary
+    assert "changed_keys=" in step.summary
+    assert leak not in step.summary
+    assert replayed["result"]["answer"] not in step.summary
+
+
 def test_tool_arg_contract_rejects_forbidden_identity_args() -> None:
     failures = acceptance._tool_arg_contract_failures(
         scenario_id="grounded_success",
@@ -360,6 +436,28 @@ def test_tool_arg_contract_rejects_forbidden_identity_args() -> None:
     )
 
     assert any("harness identity" in failure for failure in failures)
+
+
+def _completed_projection_payload(*, answer_status: str = "grounded") -> dict[str, Any]:
+    return {
+        "scenario_id": "grounded_success",
+        "state": "completed",
+        "result": {
+            "answer": "Photosynthesis stores light energy in glucose [1].",
+            "answer_status": answer_status,
+            "success": answer_status == "grounded",
+            "stop_reason": "completed",
+            "sources": [{"label": "photosynthesis-basics.md"}],
+            "steps": [{"tool_name": "rag.search", "tool_args": {"query": "light"}}],
+            "trace": {
+                "grounding": {
+                    "has_retrieval_evidence": True,
+                    "has_source_citation": True,
+                    "source_count": 1,
+                }
+            },
+        },
+    }
 
 
 def _free_port() -> int:

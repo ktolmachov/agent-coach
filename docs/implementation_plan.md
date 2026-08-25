@@ -434,8 +434,10 @@ HOLD remediation status:
   credentials, PEM private keys, GitHub/OpenAI token forms, production-readiness
   claims outside README, missing concrete private security fallback, sensitive
   credential containers and stale/dirty release evidence;
-- the clean release candidate is `829df29e58f6dd48fb09ee1400dec3c4115ad6b9`;
-  final D7 promotion remains coupled to the independent clean fresh-clone
+- commit `829df29e58f6dd48fb09ee1400dec3c4115ad6b9` is historical D7/D11
+  evidence, not the current clean release candidate; later published commits,
+  including the acceptance-demo HEAD, changed the tree after that evidence.
+  Final D7 promotion remains coupled to the independent clean fresh-clone
   evidence still required by D11.
 
 Non-goals:
@@ -753,8 +755,13 @@ Stop:
 ## D11 - Eval Gate, SOP, Review Kit and Clean Release Evidence
 
 Status: HOLD pending valid clean fresh-clone release evidence and a successful
-final promotion-gate rerun. Opt-in live-provider evidence is complete for the
-clean release candidate `829df29e58f6dd48fb09ee1400dec3c4115ad6b9`.
+final promotion-gate rerun. Historical opt-in live-provider evidence exists for
+commit `829df29e58f6dd48fb09ee1400dec3c4115ad6b9` and is not current-HEAD
+promotion evidence. The owner selected AUTONOMOUS_LIVE_POLICY =
+DOCUMENTED_LIMITATION: an autonomous planner harness remains required future
+offline work, missing paid autonomous live evidence does not by itself block
+D11, and confirmed planner accuracy must not be claimed until a later
+successful autonomous live artifact exists.
 
 Inputs:
 
@@ -770,6 +777,8 @@ Write-set:
 - deterministic offline eval runner and focused tests;
 - opt-in live eval runner and focused scripted-runner tests;
 - generated Tool SOP and drift check;
+- published acceptance demo runner, focused tests and supported command docs;
+- D11 remediation status ledger and offline status validator;
 - review-kit, README, scripts and implementation-plan documentation updates;
 - public release gate awareness for D11 eval/SOP artifacts.
 
@@ -784,6 +793,12 @@ Implemented artifacts:
 - `docs/eval_gate.md`;
 - `docs/tool_sop.md`;
 - `docs/prompts/architecture_review_prompt.md`;
+- `scripts/run_acceptance_demo.py`;
+- `tests/test_acceptance_demo.py`;
+- `docs/d11_remediation_status.json`;
+- `scripts/check_d11_remediation_status.py`;
+- `tests/test_d11_remediation_status.py`;
+- `docs/prompts/d11_remediation_implementation_prompt.md`;
 - D11 documentation updates in `README.md`, `docs/review_kit.md`,
   `scripts/README.md` and this implementation plan;
 - public release gate checks for eval-suite validity, generated Tool SOP drift,
@@ -811,10 +826,11 @@ D11 micro-slice evidence:
   final artifacts;
 - `scripts/run_live_eval.py --scripted` validates the live eval runner offline
   without treating scripted Responses output as live evidence;
-- the tracked live-provider artifact on release candidate
+- historical tracked live-provider evidence from
   `829df29e58f6dd48fb09ee1400dec3c4115ad6b9` produced five registered cases,
   task success `1.0` and external wrapper artifact SHA-256
-  `4681fcb6178079be7f362dc648657e0ae885a886ddec0a1f10d1f55762c05556`;
+  `4681fcb6178079be7f362dc648657e0ae885a886ddec0a1f10d1f55762c05556`; that
+  commit is not the current candidate and is not evidence for a later HEAD;
 - the promotion gate accepted that live evidence and kept offline
   `gate_status: PASS`, but correctly returned `promotion_status: HOLD` with
   blocker `clean_release_evidence_invalid` because the external clean-release
@@ -880,7 +896,9 @@ Checks:
 Rollback:
 
 - remove the D11 eval package, packaged eval suite, eval script, eval tests,
-  generated SOP and D11 documentation updates; keep D1-D10 intact.
+  generated SOP, acceptance-demo runner, acceptance tests, acceptance command
+  docs, D11 remediation status ledger/validator and D11 documentation updates;
+  keep D1-D10 intact.
 
 Stop:
 

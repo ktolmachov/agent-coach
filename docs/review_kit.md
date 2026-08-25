@@ -20,11 +20,22 @@ profile is not this review path.
 
 ## Acceptance Commission Run
 
-For a guided end-to-end presentation, install all public review tooling and run:
+Package A of the D11 remediation keeps the published acceptance demo as an
+explained D11 artifact. Use the active virtualenv interpreter. On Windows, a
+bare `python` launcher can be intercepted by the App Execution Alias.
+
+Windows PowerShell, from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,build]"
+.\.venv\Scripts\python.exe scripts/run_acceptance_demo.py --full-checks --serve --output ../agent-coach-acceptance-report.json
+```
+
+POSIX (separate from the Windows invocation above):
 
 ```bash
-python -m pip install -e ".[dev,build]"
-python scripts/run_acceptance_demo.py --full-checks --serve --output ../agent-coach-acceptance-report.json
+python3 -m pip install -e ".[dev,build]"
+python3 scripts/run_acceptance_demo.py --full-checks --serve --output ../agent-coach-acceptance-report.json
 ```
 
 The script fails closed on the first unsuccessful check, emits a bounded

@@ -2,10 +2,21 @@
 
 ## Acceptance Commission Demo
 
-Run the complete deterministic commissioning sequence from the repository root:
+Package A of the D11 remediation treats this runner as a published D11
+artifact. Run the complete deterministic commissioning sequence from the
+repository root. On Windows use the active virtualenv interpreter; a bare
+`python` launcher can be intercepted by the App Execution Alias.
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/run_acceptance_demo.py --full-checks --serve --output ../agent-coach-acceptance-report.json
+```
+
+POSIX:
 
 ```bash
-python scripts/run_acceptance_demo.py --full-checks --serve --output ../agent-coach-acceptance-report.json
+python3 scripts/run_acceptance_demo.py --full-checks --serve --output ../agent-coach-acceptance-report.json
 ```
 
 The script validates the wheel artifact, exported contracts, OpenAPI snapshot,

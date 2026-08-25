@@ -1,0 +1,197 @@
+{
+  "schema_version": "agent-coach-d11-remediation-status/1.0.0",
+  "updated_at_utc": "2026-08-25T09:12:01Z",
+  "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+  "base_head": "22e42e25348dfc6cd1d6aebe0ed1bbb3fb5cec7e",
+  "observed_head": "22e42e25348dfc6cd1d6aebe0ed1bbb3fb5cec7e",
+  "observed_origin_main": "22e42e25348dfc6cd1d6aebe0ed1bbb3fb5cec7e",
+  "resolved_completion_commit": null,
+  "checkpoint_commit_state": "UNCOMMITTED",
+  "checkpoint_fingerprint_sha256": "eee4c07a40c06597e2be606f52c71213f34bcc71035a871fae11941d960818ea",
+  "fingerprinted_files": [
+    {
+      "path": "docs/implementation_plan.md",
+      "sha256": "db332ec1bfc20380f9e69ff50d04d96b7f25a5e1fb09bb900ed383bcb9465fdf",
+      "state": "MODIFY"
+    },
+    {
+      "path": "docs/prompts/d11_remediation_implementation_prompt.md",
+      "sha256": "c3f024a8b5437a0ed52826c19f778e40e41d21f1a7d1f0c7cdebfb625ad05a90",
+      "state": "ADD"
+    },
+    {
+      "path": "docs/review_kit.md",
+      "sha256": "296a044230321b89721e8120f51f69eea826cc376a9d868e0482d3451e6d3d47",
+      "state": "MODIFY"
+    },
+    {
+      "path": "scripts/README.md",
+      "sha256": "18818fffec6ca337d22387bba0055b8f18103aa5a2636023f78da2d6b9b59220",
+      "state": "MODIFY"
+    },
+    {
+      "path": "scripts/check_d11_remediation_status.py",
+      "sha256": "b2d0b48312a8267f834a7425b04a3a17182462f9df5d7196985cde5d50380b03",
+      "state": "ADD"
+    },
+    {
+      "path": "scripts/run_acceptance_demo.py",
+      "sha256": "31806ea8f282d993a78f55ab50f7420ac25fb7ac12590f950f154a4be114d4de",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_acceptance_demo.py",
+      "sha256": "e4da93f57b4e9c9ff463331490dee08a656a8141792b4cc413cdb07b50a182c7",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_d11_remediation_status.py",
+      "sha256": "77da956a4a059d3727486941449e52728ee6a6b31ba2e0fb7e92a9e68a2a0606",
+      "state": "ADD"
+    }
+  ],
+  "worktree_state": "DIRTY_EXPECTED",
+  "active_session_id": null,
+  "session_started_at_utc": "2026-08-25T09:00:04Z",
+  "lease_status": "RELEASED",
+  "current_package": "A",
+  "implementation_status": "COMPLETE",
+  "package_verdict": "PASS",
+  "d11_promotion_status": "HOLD",
+  "network_provider_calls": 0,
+  "provider_cost_status": "zero",
+  "changed_files": [
+    {
+      "path": "docs/d11_remediation_status.json",
+      "purpose": "Inter-session Package A checkpoint ledger.",
+      "state": "ADD"
+    },
+    {
+      "path": "docs/implementation_plan.md",
+      "purpose": "Reconcile D11 write-set, rollback, and historical evidence role.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "docs/prompts/d11_remediation_implementation_prompt.md",
+      "purpose": "Approved Package A master-prompt with progress marks for completed A work and zero-configuration offline resume protocol.",
+      "state": "ADD"
+    },
+    {
+      "path": "docs/review_kit.md",
+      "purpose": "Document Windows and POSIX acceptance commands for Package A.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "scripts/README.md",
+      "purpose": "Document Windows and POSIX acceptance commands for Package A.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "scripts/check_d11_remediation_status.py",
+      "purpose": "Fix committed fingerprint, append-only ledger, and E2 handoff.",
+      "state": "ADD"
+    },
+    {
+      "path": "scripts/run_acceptance_demo.py",
+      "purpose": "Add bounded same_accepted_response vs same_result_projection diagnostics.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_acceptance_demo.py",
+      "purpose": "Cover bounded reproducibility failure branches.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_d11_remediation_status.py",
+      "purpose": "Cover commit/resume lifecycle, append-only ledger, and E2 caps.",
+      "state": "ADD"
+    }
+  ],
+  "checks_passed": [
+    {
+      "id": "acceptance_suite",
+      "command": "python -m pytest tests/test_acceptance_demo.py -p no:cacheprovider",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "status_validator_suite",
+      "command": "python -m pytest tests/test_d11_remediation_status.py -p no:cacheprovider",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "status_validator_cli",
+      "command": "python scripts/check_d11_remediation_status.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "localhost_acceptance_repeats",
+      "command": "python -m pytest tests/test_acceptance_demo.py::test_live_localhost_api_acceptance_smoke -p no:cacheprovider",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "ruff_touched_python",
+      "command": "python -m ruff check scripts/check_d11_remediation_status.py scripts/run_acceptance_demo.py tests/test_d11_remediation_status.py tests/test_acceptance_demo.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "compileall_touched_python",
+      "command": "python -m compileall -q scripts/check_d11_remediation_status.py scripts/run_acceptance_demo.py tests/test_d11_remediation_status.py tests/test_acceptance_demo.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "public_release",
+      "command": "python scripts/check_public_release.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "git_diff_check",
+      "command": "git diff --check",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "commit_resume_lifecycle",
+      "command": "python -m pytest tests/test_d11_remediation_status.py::test_package_a_uncommitted_commit_validate_start_b1 -p no:cacheprovider",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    }
+  ],
+  "checks_not_run": [
+    "full_pytest_suite",
+    "live_provider_eval",
+    "fresh_clone_clean_release",
+    "d11_promotion_gate",
+    "package_a_git_commit"
+  ],
+  "remaining_risks": [
+    "Windows localhost acceptance smoke passed 10 sequential repeats on this host; a previously observed flake was not reproduced and is not claimed eliminated.",
+    "Historical live-provider evidence from 829df29 remains non-current and is not promotion evidence for this HEAD.",
+    "R-16 remains open: docs/review_kit.md five-minute quickstart and full public check blocks still use a bare python launcher. Package C2 owns Windows/POSIX invocation for those commands.",
+    "Package A is still UNCOMMITTED. The standard continuation command now authorizes exact-diff checkpoint commit/reconciliation before B1; any mismatch must still fail closed.",
+    "D11 promotion remains HOLD pending later offline packages, reviewed clean commit, and valid clean-release evidence."
+  ],
+  "blockers": [],
+  "last_completed_package": "A",
+  "next_allowed_package": "B1",
+  "exact_resume_instruction": "Run the standard continuation command against docs/prompts/d11_remediation_implementation_prompt.md. Validate the ledger and exact Package A diff, create the authorized local checkpoint commit without push/tag, set COMMITTED_CHECKPOINT and resolved_completion_commit, re-run the validator, then start B1 without another scope approval. Keep AUTONOMOUS_LIVE_POLICY=DOCUMENTED_LIMITATION. R-16 remains deferred to C2.",
+  "package_ledger": [
+    {
+      "package": "A",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "22e42e25348dfc6cd1d6aebe0ed1bbb3fb5cec7e",
+      "completed_at_utc": "2026-08-25T09:00:04Z",
+      "evidence_summary": "Package A reconciled D11 scope, fixed commit/resume validation, and recorded R-16 as deferred.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": null,
+      "entry_sha256": "a686a33b090ba748ed4fc332d44112662a5960b829ada13a322b25e4c70ba800"
+    }
+  ]
+}

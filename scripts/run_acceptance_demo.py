@@ -792,14 +792,26 @@ def _verify_reproducibility_and_tool_args(
         )
         replay_acceptance_matches = replayed == first_case.accepted
         if not replay_acceptance_matches:
-            failures.append("idempotency replay did not return the same acceptance")
+            failures.append(
+                _bounded_replay_branch_failure(
+                    branch="same_accepted_response",
+                    baseline=first_case.accepted,
+                    replayed=replayed,
+                )
+            )
         replayed_completed = _http_json(port, str(first_case.accepted["polling_url"]))
         replay_projection_matches = (
             _stable_case_projection(replayed_completed)
             == _stable_case_projection(first_case.completed)
         )
         if not replay_projection_matches:
-            failures.append("idempotency replay changed the stable result projection")
+            failures.append(
+                _bounded_replay_branch_failure(
+                    branch="same_result_projection",
+                    baseline=_stable_case_projection(first_case.completed),
+                    replayed=_stable_case_projection(replayed_completed),
+                )
+            )
 
     projection_hashes: dict[str, str] = {}
     for case in completed_cases:
@@ -1204,6 +1216,41 @@ def _stable_case_projection(completed: dict[str, Any]) -> dict[str, Any]:
             "source_count": grounding.get("source_count"),
         },
     }
+
+
+def _bounded_replay_branch_failure(
+    *,
+    branch: str,
+    baseline: object,
+    replayed: object,
+) -> str:
+    """Name the failed replay branch without echoing response bodies."""
+    return (
+        f"{branch}=false; "
+        f"baseline_sha256={_sha256_json(baseline)[:12]}; "
+        f"replay_sha256={_sha256_json(replayed)[:12]}; "
+        f"{_bounded_key_diff(baseline, replayed)}"
+    )
+
+
+def _bounded_key_diff(baseline: object, replayed: object) -> str:
+    if not isinstance(baseline, dict) or not isinstance(replayed, dict):
+        return "payload_kind=non_object"
+    only_baseline = sorted(set(baseline) - set(replayed))
+    only_replayed = sorted(set(replayed) - set(baseline))
+    changed = sorted(
+        key
+        for key in set(baseline) & set(replayed)
+        if baseline[key] != replayed[key]
+    )
+    parts: list[str] = []
+    if only_baseline:
+        parts.append(f"only_baseline_keys={only_baseline[:8]}")
+    if only_replayed:
+        parts.append(f"only_replay_keys={only_replayed[:8]}")
+    if changed:
+        parts.append(f"changed_keys={changed[:8]}")
+    return "; ".join(parts) if parts else "keys_equal"
 
 
 def _bounded_json_value(value: object) -> object:
