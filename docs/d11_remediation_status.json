@@ -1,17 +1,17 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T19:56:59Z",
+  "updated_at_utc": "2026-08-25T19:58:03Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "5ff8245f14c47f0f95ddfb2b6a8c24a496da3059",
-  "observed_head": "5ff8245f14c47f0f95ddfb2b6a8c24a496da3059",
-  "observed_origin_main": "c06bb13a5dba000a59e2b6f6653dcf55b4f47724",
+  "base_head": "4732e81f882894c308d0b5a37c98a5e99ef33701",
+  "observed_head": "4732e81f882894c308d0b5a37c98a5e99ef33701",
+  "observed_origin_main": "5ff8245f14c47f0f95ddfb2b6a8c24a496da3059",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "4dad6d1e5c1bc478b1456d6c7a24c32154bd992b262eeb270527ff8bae28c7f9",
+  "checkpoint_fingerprint_sha256": "a78b7e3c6e81dafc629b23596c6698f89cd92a95fef927ab7847f9ebad47af6b",
   "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T19:56:59Z",
+  "session_started_at_utc": "2026-08-25T19:58:03Z",
   "lease_status": "RELEASED",
   "current_package": "E1",
   "implementation_status": "COMPLETE",
@@ -22,7 +22,7 @@
   "changed_files": [
     {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record E1 READY_TO_COMMIT checkpoint after E2 handoff validator accepted external labels.",
+      "purpose": "Record E1 READY_TO_COMMIT checkpoint after origin/main synchronized with handoff validator fix.",
       "state": "MODIFY"
     }
   ],
@@ -390,6 +390,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "3834c705d508e26269b18023608a5448f8d212a7bec82c267eec6783d1704583",
       "entry_sha256": "e4d1b7f2b81c38914cb2057f90bf73ea32c5610d765b31fe8f67d32a794bc920"
+    },
+    {
+      "package": "E1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "4732e81f882894c308d0b5a37c98a5e99ef33701",
+      "completed_at_utc": "2026-08-25T19:58:03Z",
+      "evidence_summary": "Recorded E1 checkpoint after origin/main synchronized with E2 handoff validator fix; E2 remains next and promotion HOLD.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "e4d1b7f2b81c38914cb2057f90bf73ea32c5610d765b31fe8f67d32a794bc920",
+      "entry_sha256": "7c0b368d613365dfabb4e6418618930da345aab94300258d1fbab4cb3844dba4"
     }
   ]
 }
