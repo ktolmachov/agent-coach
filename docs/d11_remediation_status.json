@@ -1,53 +1,17 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:48:42Z",
+  "updated_at_utc": "2026-08-25T16:50:15Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "4972b75966fc9ce89fabefdd3ce099212fe3c2a2",
-  "observed_head": "4972b75966fc9ce89fabefdd3ce099212fe3c2a2",
+  "base_head": "a846c5d764cc2b68dfef8a5d5b86166b01299d4d",
+  "observed_head": "a846c5d764cc2b68dfef8a5d5b86166b01299d4d",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "6cd0a8391478fe078d565ca81774b5372942bbfb2532b4399f60c9d1c38e250a",
-  "fingerprinted_files": [
-    {
-      "path": "docs/eval_gate.md",
-      "sha256": "3adda24efc4bd3f5966ade63cda7172f6929374858e1990fc23832439cfbb94e",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/implementation_plan.md",
-      "sha256": "aec49b3ae377a092871f7d463da2e4c0097c4d6e16ec9c1e23223ab936ca146a",
-      "state": "MODIFY"
-    },
-    {
-      "path": "scripts/run_live_eval.py",
-      "sha256": "b0ba75d078a7a64f40247b44c922eebeceb72c221fe6364ece4052606bf5eed4",
-      "state": "MODIFY"
-    },
-    {
-      "path": "src/agent_coach/eval/gate.py",
-      "sha256": "db61b000c21df7f3382813f4f48a9a0e8096c4228132492349f3d510f565c00d",
-      "state": "MODIFY"
-    },
-    {
-      "path": "src/agent_coach/eval/live_evidence.py",
-      "sha256": "10a5bd99fb52052d9228219c4bdd800a8de7c94a28e1a0d040d9e368cb31c23d",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_eval_gate.py",
-      "sha256": "ca48b0310c184368091257f79092e3b957ae909cd2f86bce4973b78abda37a87",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_live_eval_runner.py",
-      "sha256": "3ea38ebfe6f5dbcdcd10369ff4b4b938a33e758c493ebbbcba0be34aa9075990",
-      "state": "MODIFY"
-    }
-  ],
+  "checkpoint_fingerprint_sha256": "62f59480508e738c8dfb86008b604b0700036d3e876a02520ab2913dfaa3b559",
+  "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T16:48:42Z",
+  "session_started_at_utc": "2026-08-25T16:50:15Z",
   "lease_status": "RELEASED",
   "current_package": "E1",
   "implementation_status": "COMPLETE",
@@ -57,43 +21,8 @@
   "provider_cost_status": "zero",
   "changed_files": [
     {
-      "path": "docs/eval_gate.md",
-      "purpose": "Document separate autonomous tool-selection evidence semantics.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/implementation_plan.md",
-      "purpose": "Record E1 autonomous harness evidence and promotion semantics.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "scripts/run_live_eval.py",
-      "purpose": "Add autonomous scripted/live runner mode without forced tool requirement.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "src/agent_coach/eval/gate.py",
-      "purpose": "Publish optional autonomous evidence status without promotion blocking under documented limitation.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "src/agent_coach/eval/live_evidence.py",
-      "purpose": "Define autonomous registry, schema, thresholds and validation helpers.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_eval_gate.py",
-      "purpose": "Assert autonomous evidence absence and failure do not block under documented limitation.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_live_eval_runner.py",
-      "purpose": "Assert autonomous runner schema, metrics, threshold drift and auto tool-choice behavior.",
-      "state": "MODIFY"
-    },
-    {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package E1 READY_TO_COMMIT checkpoint and verification evidence.",
+      "purpose": "Record Package E1 corrective READY_TO_COMMIT checkpoint after line-ending fingerprint normalization.",
       "state": "MODIFY"
     }
   ],
@@ -119,6 +48,12 @@
     {
       "id": "public_release",
       "command": "python scripts/check_public_release.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "strict_public_release",
+      "command": "python scripts/check_public_release.py --release",
       "platform": "win32/Windows",
       "result": "PASS"
     },
@@ -155,7 +90,7 @@
   "blockers": [],
   "last_completed_package": "E1",
   "next_allowed_package": "E2",
-  "exact_resume_instruction": "On clean HEAD after committing this E1 READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then perform Package E2 by creating external forced live evidence and clean-release evidence for the reviewed commit. Do not edit tracked STATUS_FILE for E2; use the handoff artifact protocol.",
+  "exact_resume_instruction": "On clean HEAD after committing this E1 corrective READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then perform Package E2 by creating external forced live evidence and clean-release evidence for the reviewed commit. Do not edit tracked STATUS_FILE for E2; use the handoff artifact protocol.",
   "package_ledger": [
     {
       "package": "A",
@@ -420,6 +355,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "c8b0a8d86a0261186b944d1886422ca37eef19c66d7e01284fd35660da27fc36",
       "entry_sha256": "20476eee9e0e18057a828e1127d667436139a603ce0ca38262b9438cc87802fd"
+    },
+    {
+      "package": "E1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "a846c5d764cc2b68dfef8a5d5b86166b01299d4d",
+      "completed_at_utc": "2026-08-25T16:50:15Z",
+      "evidence_summary": "Corrected E1 status checkpoint after clean-head line-ending fingerprint normalization; autonomous harness checks remain PASS.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "20476eee9e0e18057a828e1127d667436139a603ce0ca38262b9438cc87802fd",
+      "entry_sha256": "df0354decc05ee5f230a351802262b1290081159c892e3a304037771336bdc20"
     }
   ]
 }
