@@ -76,8 +76,8 @@ validator и ledger.
 
 | Package | Status | Verdict | Notes |
 | --- | --- | --- | --- |
-| A | COMPLETE | PASS | Schema 2.0.0 READY_TO_COMMIT on an A-only tree; later packages require this committed predecessor checkpoint. Do not start B2. |
-| B1 | IN_PROGRESS | HOLD | Isolated in stash `d11-b1-c2-isolation-after-output-path-fix`; not the active package. Do not start B2. |
+| A | COMPLETE | PASS | Base checkpoint `f045f0c` is on clean HEAD; current audit-remediation READY_TO_COMMIT snapshot must be committed and validated before B1. Do not start B2. |
+| B1 | IN_PROGRESS | HOLD | Isolated in stash `d11-b1-c2-isolation-after-output-path-fix`; resume only after the current A audit-remediation checkpoint is clean. Do not start B2. |
 | B2 | NOT_STARTED | NOT_RUN | Do not start. |
 | C1 | NOT_STARTED | NOT_RUN | |
 | C2 | NOT_STARTED | NOT_RUN | Owns remaining R-16 bare-`python` commands outside acceptance. |
@@ -108,6 +108,19 @@ Package A, already done:
 - later packages require HEAD:`docs/d11_remediation_status.json` to be a
   schema 2.0.0 READY_TO_COMMIT predecessor with a causal first-parent
   checkpoint; schema 1.0.0/`UNCOMMITTED` HEAD cannot open B1;
+- local A checkpoint `f045f0c` is committed; validator PASSes on clean HEAD
+  with `resolved_completion_commit` still null and derived HEAD bound from
+  Git; `origin/main` currently also resolves to `f045f0c`, so earlier
+  no-push wording is stale; premature `d5d1fe0` is first parent and is not
+  rewritten;
+- audit-remediation validator now checks real E2 promotion/live-wrapper/clean
+  release evidence schemas, actual clean Git worktree for E2 PASS, and the
+  Git-derived state of `STATUS_FILE`;
+- second audit-remediation pass requires semantically complete live public
+  artifacts, live wrappers, clean-release evidence and promotion reports;
+  committed predecessor checkpoints must prove committed diff/fingerprint/
+  write-set consistency, and E2 promotion must start from a valid committed E1
+  READY_TO_COMMIT checkpoint;
 - B1/C2 leftovers are isolated in stash
   `d11-b1-c2-isolation-after-output-path-fix` and are not A artifacts.
 
@@ -117,8 +130,10 @@ Package A, still open:
 
 Package B1, present as leftovers, not the active package:
 
-- restore stash `d11-b1-c2-isolation-after-output-path-fix` only after the
-  A READY_TO_COMMIT checkpoint is committed and validated on clean HEAD;
+- A READY_TO_COMMIT checkpoint is already committed and validated on clean
+  HEAD; additionally commit and validate the current A audit-remediation
+  snapshot before restoring stash `d11-b1-c2-isolation-after-output-path-fix`
+  for an explicit B1 resume;
 - do not start B2.
 
 ## Master-prompt
@@ -505,7 +520,7 @@ provider/tool-contract среза. Пакет G не является часть
 
 ──────────────────────────────────────────────────────────────────────────────
 PACKAGE A — Scope reconciliation и acceptance-demo
-STATUS: COMPLETE (READY_TO_COMMIT; B1 remains HOLD in stash; do not start B2)
+STATUS: COMPLETE (base checkpoint `f045f0c` on clean HEAD; current audit-remediation snapshot READY_TO_COMMIT; B1 remains HOLD in stash; do not start B2)
 ──────────────────────────────────────────────────────────────────────────────
 
 Цель:
@@ -559,12 +574,19 @@ Write-set:
    COMPLETE+PASS использует `READY_TO_COMMIT` без записи commit hash в JSON.
    E2 promotion PASS fail-closed на неполное evidence. Начальный ledger не должен
    утверждать завершение пакетов, которые не доказаны текущим проходом.
+8. [DONE] Для пакета после A validator при `repo_root` доказывает committed
+   schema 2.0.0 READY_TO_COMMIT snapshot предыдущего пакета и causal
+   first-parent checkpoint; ledger order alone cannot open B1.
+9. [DONE] Validator сверяет committed predecessor diff с fingerprint и
+   write-set, проверяет полный E1 checkpoint перед E2 promotion, и отвергает
+   семантически пустые promotion/live-wrapper/clean-release JSON.
 
 DoD:
 
 - [DONE] A-only public docs match HEAD runtime; B1 leftovers are isolated;
-  a schema 2.0.0 READY_TO_COMMIT snapshot is recorded without rewriting
-  premature local commit `d5d1fe0`;
+  schema 2.0.0 READY_TO_COMMIT is committed as base checkpoint `f045f0c`
+  without rewriting premature local commit `d5d1fe0`; current audit-remediation
+  READY_TO_COMMIT snapshot is recorded separately;
 - [DONE] rollback плана включает acceptance-demo;
 - [DONE] targeted acceptance suite проходит;
 - [DONE] диагностика сообщает конкретную ветвь reproducibility failure;
@@ -578,20 +600,28 @@ DoD:
   dirty checkpoints, and unverified artifacts;
 - [DONE] schema 2.0.0 rejects 1.0.0 documents;
 - [DONE] валидный A COMPLETE + PASS READY_TO_COMMIT checkpoint записан;
-  next_allowed is B1 after the local A commit;
+  локальный commit `f045f0c`; next_allowed is B1; validator PASSes on clean
+  HEAD without rewriting `resolved_completion_commit`;
 - [DONE] `git diff --check` чист.
 
 Проверки:
 
 - [DONE] `.\.venv\Scripts\python.exe -m pytest tests/test_acceptance_demo.py -p no:cacheprovider`;
 - [DONE] `.\.venv\Scripts\python.exe -m pytest tests/test_d11_remediation_status.py -p no:cacheprovider`;
-- [DONE] `.\.venv\Scripts\python.exe scripts/check_d11_remediation_status.py`;
-- [DONE] повтор проблемного теста согласованное число раз;
-- [DONE] `.\.venv\Scripts\python.exe scripts/check_public_release.py`.
+- [DONE] `.\.venv\Scripts\python.exe scripts/check_d11_remediation_status.py`
+  on the dirty READY_TO_COMMIT tree and again on clean HEAD `f045f0c`;
+- [DONE] повтор проблемного теста согласованное число раз (10/10 win32);
+- [DONE] `.\.venv\Scripts\python.exe scripts/check_public_release.py`;
+- [DONE] `.\.venv\Scripts\python.exe -m ruff check scripts/check_d11_remediation_status.py tests/test_d11_remediation_status.py`;
+- [DONE] `.\.venv\Scripts\python.exe -m compileall -q scripts/check_d11_remediation_status.py tests/test_d11_remediation_status.py`;
+- [DONE] `git diff --check`;
+- [DONE] local A checkpoint commit `f045f0c` (origin/main now also `f045f0c`;
+  no tag).
 
-Остановись после promotion report пакета A. Package A is COMPLETE+PASS
-READY_TO_COMMIT. Do not start B2. Leave B1 HOLD in stash until this
-checkpoint is committed and validated on clean HEAD.
+Остановись после promotion report пакета A. Package A is COMPLETE+PASS;
+commit the current audit-remediation READY_TO_COMMIT snapshot and validate it
+on clean HEAD before B1. Do not start B2. Leave B1 HOLD in stash
+`d11-b1-c2-isolation-after-output-path-fix`.
 
 ──────────────────────────────────────────────────────────────────────────────
 PACKAGE B1 — Единый live registry и causal evidence harness
@@ -647,8 +677,13 @@ STATUS: IN_PROGRESS (HOLD leftovers isolated in stash; not the active package)
 8. [DONE] Scripted payload нельзя превратить в live простым переключением полей.
 9. [DONE] Ошибка provenance должна быть bounded и не раскрывать provider data.
 10. [DONE] Current public schema fail-closed: unexpected keys и unsafe values
-    (включая secret-like identifier fields) отклоняются.
+    (включая secret-like identifier fields, raw-provider grammar и oversized
+    dynamic public text) отклоняются.
 11. [DONE] Public release gate сверяет current artifact с HEAD.
+12. [DONE] Live `--output` и wrapper paths резолвятся один раз относительно
+    `REPO_ROOT` в абсолютный путь; guard и запись используют тот же Path.
+13. [DONE] Failed post-check не оставляет финальный evidence file; partial
+    удаляется.
 
 DoD:
 
@@ -659,8 +694,11 @@ DoD:
 - [DONE] `--release` проходит без требования tracked current live artifact;
 - [DONE] scripted artifact отклоняется независимо от ручной правки одного флага;
 - [DONE] default scripted tests остаются offline;
-- [HOLD] package verdict remains HOLD; restore the stash after the A
-  checkpoint is on clean HEAD before recording B1 COMPLETE+PASS.
+- [HOLD] package verdict remains HOLD in stash
+  `d11-b1-c2-isolation-after-output-path-fix`; A base checkpoint `f045f0c` is
+  already on clean HEAD, but the current A audit-remediation checkpoint must be
+  committed first; do not record B1 COMPLETE+PASS until an explicit B1 resume
+  restores that stash.
 
 Остановись после promotion report пакета B1. Do not start B2.
 
@@ -683,7 +721,7 @@ PACKAGE B2 — Wrapper и promotion gate harness
 
 Требования:
 
-1. Wrapper обязан проверить `artifact.evaluated_commit == HEAD` и все hashes.
+1. Wrapper обязан проверить `wrapper.commit == HEAD` и все artifact hashes.
 2. Wrapper переносит проверенный commit, но не генерирует его как новое
    утверждение.
 3. Promotion gate отклоняет:

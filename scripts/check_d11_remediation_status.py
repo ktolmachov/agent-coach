@@ -22,6 +22,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from agent_coach.eval.live_evidence import validate_live_eval_public_payload
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STATUS_PATH = REPO_ROOT / "docs" / "d11_remediation_status.json"
 STATUS_SCHEMA_VERSION = "agent-coach-d11-remediation-status/2.0.0"
@@ -53,6 +55,29 @@ HANDOFF_ARTIFACT_TYPES = (
     "clean_release",
     "promotion_report",
 )
+EVAL_REPORT_SCHEMA_VERSION = "agent-coach-diploma-eval-report/1.0.0"
+LIVE_EVAL_PUBLIC_SCHEMA_VERSION = "agent-coach-live-eval-public/1.0.0"
+LIVE_EVAL_WRAPPER_SCHEMA_VERSION = "agent-coach-live-eval-evidence/1.0.0"
+CLEAN_RELEASE_EVIDENCE_SCHEMA_VERSION = (
+    "agent-coach-clean-release-evidence/1.0.0"
+)
+EXPECTED_LIVE_EVIDENCE_PROVENANCE = {
+    "classification": "redacted_live_provider_eval",
+    "contains_credentials": False,
+    "contains_learner_data": False,
+    "contains_hometutor_runtime_dependency": False,
+}
+EXPECTED_CLEAN_RELEASE_EVIDENCE_PROVENANCE = {
+    "classification": "clean_release_review_evidence",
+    "contains_credentials": False,
+    "contains_learner_data": False,
+    "contains_hometutor_runtime_dependency": False,
+}
+EXPECTED_CLEAN_RELEASE_COMMANDS = {
+    "fresh_clone_suite": "python -m pytest",
+    "public_release_gate": "python scripts/check_public_release.py --release",
+    "offline_eval_gate": "python scripts/run_eval_gate.py",
+}
 LIVE_EVIDENCE_MAX_BYTES = 64000
 PROMOTION_REPORT_MAX_BYTES = 128000
 ARTIFACT_SIZE_CAPS = {
@@ -537,6 +562,7 @@ def observe_worktree(
     origin = _git_output(repo_root, "rev-parse", "origin/main", check=False)
     origin_main = origin.stdout.strip() if origin.returncode == 0 else head
     changed_paths = _git_status_paths(repo_root)
+    changed_file_states = _git_status_file_states(repo_root)
     unexpected = tuple(
         path for path in changed_paths if not _path_allowed(package, path)
     )
@@ -550,6 +576,7 @@ def observe_worktree(
         "head": head,
         "origin_main": origin_main,
         "changed_paths": changed_paths,
+        "changed_file_states": changed_file_states,
         "unexpected_paths": unexpected,
         "fingerprinted_files": files,
         "checkpoint_fingerprint_sha256": fingerprint_sha256(
@@ -576,6 +603,7 @@ def observe_committed_diff(
     )
     files: list[dict[str, str]] = []
     changed_paths: list[str] = []
+    changed_file_states: dict[str, str] = {}
     unexpected: list[str] = []
     for line in output.splitlines():
         if not line.strip() or "\t" not in line:
@@ -585,12 +613,14 @@ def observe_committed_diff(
         if not path:
             continue
         changed_paths.append(path)
+        state = _diff_status_to_state(code)
+        if state is not None:
+            changed_file_states[path] = state
         if path == STATUS_FILE:
             continue
         if not _path_allowed(package, path):
             unexpected.append(path)
             continue
-        state = _diff_status_to_state(code)
         if state is None:
             unexpected.append(path)
             continue
@@ -604,6 +634,7 @@ def observe_committed_diff(
     files.sort(key=lambda item: item["path"])
     return {
         "changed_paths": tuple(dict.fromkeys(changed_paths)),
+        "changed_file_states": changed_file_states,
         "unexpected_paths": tuple(dict.fromkeys(unexpected)),
         "fingerprinted_files": files,
         "checkpoint_fingerprint_sha256": fingerprint_sha256(
@@ -647,6 +678,7 @@ def observe_checkpoint(
             )
         ),
         "committed_paths": committed["changed_paths"],
+        "committed_file_states": committed["changed_file_states"],
         "derived_resolved_completion_commit": worktree["head"],
         "first_parent": _first_parent(repo_root),
     }
@@ -970,18 +1002,98 @@ def _committed_ready_checkpoint(
     package: str,
     repo_root: Path,
 ) -> bool:
-    if snapshot is None:
-        return False
-    parent = _first_parent(repo_root)
-    return (
-        snapshot.get("schema_version") == STATUS_SCHEMA_VERSION
-        and snapshot.get("current_package") == package
-        and snapshot.get("implementation_status") == "COMPLETE"
-        and snapshot.get("package_verdict") == "PASS"
-        and snapshot.get("checkpoint_commit_state") == "READY_TO_COMMIT"
-        and parent is not None
-        and snapshot.get("observed_head") == parent
+    return not _committed_ready_checkpoint_failures(
+        snapshot,
+        package=package,
+        repo_root=repo_root,
     )
+
+
+def _committed_ready_checkpoint_failures(
+    snapshot: Mapping[str, Any] | None,
+    *,
+    package: str,
+    repo_root: Path,
+) -> list[str]:
+    if snapshot is None:
+        return ["missing committed status checkpoint"]
+    failures: list[str] = []
+    if tuple(snapshot.keys()) != STATUS_KEYS:
+        failures.append("committed checkpoint schema keys are invalid")
+        return failures
+    if snapshot.get("schema_version") != STATUS_SCHEMA_VERSION:
+        failures.append("committed checkpoint schema_version is invalid")
+    if snapshot.get("current_package") != package:
+        failures.append("committed checkpoint package is invalid")
+    if snapshot.get("implementation_status") != "COMPLETE":
+        failures.append("committed checkpoint is not COMPLETE")
+    if snapshot.get("package_verdict") != "PASS":
+        failures.append("committed checkpoint verdict is not PASS")
+    if snapshot.get("checkpoint_commit_state") != "READY_TO_COMMIT":
+        failures.append("committed checkpoint is not READY_TO_COMMIT")
+    parent = _first_parent(repo_root)
+    if parent is None:
+        failures.append("committed checkpoint has no causal parent")
+    elif snapshot.get("observed_head") != parent:
+        failures.append("committed checkpoint observed_head is not first parent")
+    failures.extend(_validate_common_fields(snapshot, handoff=False))
+    failures.extend(_validate_tracked_fields(snapshot))
+    failures.extend(_validate_ledger(snapshot, handoff=False))
+    failures.extend(
+        _validate_package_transition(snapshot, handoff=False, repo_root=None)
+    )
+    failures.extend(_validate_lease_snapshot(snapshot, handoff=False))
+    failures.extend(_validate_required_checks(snapshot, handoff=False))
+    failures.extend(_validate_offline_cost(snapshot, handoff=False))
+    if failures:
+        return failures
+    try:
+        head = _git_output(repo_root, "rev-parse", "HEAD").strip()
+        committed = observe_committed_diff(
+            repo_root,
+            base_head=str(snapshot["base_head"]),
+            resolved_commit=head,
+            package=package,
+        )
+    except (OSError, subprocess.CalledProcessError, StatusValidationError):
+        return ["cannot observe committed checkpoint diff"]
+    if committed["unexpected_paths"]:
+        failures.append("committed checkpoint includes unexpected paths")
+    declared = [
+        {
+            "path": item["path"],
+            "sha256": item["sha256"],
+            "state": item["state"],
+        }
+        for item in snapshot.get("fingerprinted_files", [])
+        if isinstance(item, dict)
+    ]
+    if declared != committed["fingerprinted_files"]:
+        failures.append("committed checkpoint fingerprinted_files mismatch")
+    if committed["checkpoint_fingerprint_sha256"] != snapshot.get(
+        "checkpoint_fingerprint_sha256"
+    ):
+        failures.append("committed checkpoint fingerprint mismatch")
+    failures.extend(
+        _validate_status_file_state_against_repository(
+            snapshot,
+            {
+                "derived_resolved_completion_commit": head,
+                "committed_file_states": committed["changed_file_states"],
+            },
+        )
+    )
+    ancestor = _git_output(
+        repo_root,
+        "merge-base",
+        "--is-ancestor",
+        str(snapshot["base_head"]),
+        "HEAD",
+        check=False,
+    )
+    if ancestor.returncode != 0:
+        failures.append("committed checkpoint base_head is not an ancestor")
+    return failures
 
 
 def _validate_committed_predecessor_checkpoint(
@@ -1183,6 +1295,7 @@ def _validate_against_repository(
     ]
     if declared != observed["fingerprinted_files"]:
         failures.append("fingerprinted_files do not match repository")
+    failures.extend(_validate_status_file_state_against_repository(payload, observed))
     ancestor = _git_output(
         repo_root,
         "merge-base",
@@ -1304,6 +1417,44 @@ def _validate_changed_files_manifest(payload: Mapping[str, Any]) -> list[str]:
     return []
 
 
+def _validate_status_file_state_against_repository(
+    payload: Mapping[str, Any],
+    observed: Mapping[str, Any],
+) -> list[str]:
+    files = payload.get("changed_files")
+    if not _changed_file_list(files):
+        return []
+    status_entries = [item for item in files if item["path"] == STATUS_FILE]
+    if len(status_entries) != 1:
+        return []
+    expected = _observed_status_file_state(payload, observed)
+    if expected is None:
+        return ["STATUS_FILE state cannot be verified"]
+    if status_entries[0]["state"] != expected:
+        return ["STATUS_FILE state does not match repository"]
+    return []
+
+
+def _observed_status_file_state(
+    payload: Mapping[str, Any],
+    observed: Mapping[str, Any],
+) -> str | None:
+    if (
+        payload.get("checkpoint_commit_state") == "READY_TO_COMMIT"
+        and observed.get("derived_resolved_completion_commit") is not None
+    ):
+        committed_states = observed.get("committed_file_states")
+        if isinstance(committed_states, Mapping):
+            state = committed_states.get(STATUS_FILE)
+            return str(state) if state in FILE_STATES else None
+        return None
+    worktree_states = observed.get("changed_file_states")
+    if isinstance(worktree_states, Mapping):
+        state = worktree_states.get(STATUS_FILE)
+        return str(state) if state in FILE_STATES else None
+    return None
+
+
 def _validate_promotion_provenance(
     payload: Mapping[str, Any],
     *,
@@ -1322,12 +1473,29 @@ def _validate_promotion_provenance(
         return ["promotion PASS requires E1 COMPLETE+PASS"]
     if previous_status.get("next_allowed_package") != "E2":
         return ["promotion PASS requires E1 next_allowed_package E2"]
+    checkpoint_failures = _committed_ready_checkpoint_failures(
+        previous_status,
+        package="E1",
+        repo_root=repo_root,
+    )
+    if checkpoint_failures:
+        return ["promotion PASS requires valid committed E1 checkpoint"]
     try:
         head = _git_output(repo_root, "rev-parse", "HEAD").strip()
     except (OSError, subprocess.CalledProcessError, StatusValidationError):
         return ["promotion PASS requires git HEAD"]
     if head != payload.get("resolved_completion_commit"):
         return ["resolved_completion_commit does not match git HEAD"]
+    if payload.get("observed_head") != head:
+        return ["observed_head does not match git HEAD"]
+    origin = _git_output(repo_root, "rev-parse", "origin/main", check=False)
+    if origin.returncode == 0:
+        if payload.get("observed_origin_main") != origin.stdout.strip():
+            return ["observed_origin_main does not match origin/main"]
+    elif payload.get("observed_origin_main") != head:
+        return ["observed_origin_main must match observed_head without origin/main"]
+    if _git_status_paths(repo_root):
+        return ["promotion PASS requires clean git worktree"]
     return []
 
 
@@ -1340,6 +1508,7 @@ def _validate_artifact_files(
     failures: list[str] = []
     bodies: list[tuple[Mapping[str, Any], bytes]] = []
     digest_by_type: dict[str, str] = {}
+    payload_by_type: dict[str, Mapping[str, Any]] = {}
     for item in artifacts:
         filename = str(item.get("filename", ""))
         if not BASENAME_RE.fullmatch(filename):
@@ -1361,6 +1530,12 @@ def _validate_artifact_files(
         if len(data) > cap:
             failures.append("handoff artifact file exceeds registered cap")
         bodies.append((item, data))
+        try:
+            decoded = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if isinstance(decoded, Mapping):
+            payload_by_type[artifact_type] = decoded
     for item, data in bodies:
         failures.extend(
             _validate_artifact_payload(
@@ -1368,6 +1543,7 @@ def _validate_artifact_files(
                 data,
                 resolved_commit=resolved_commit,
                 digest_by_type=digest_by_type,
+                payload_by_type=payload_by_type,
             )
         )
     return failures
@@ -1379,6 +1555,7 @@ def _validate_artifact_payload(
     *,
     resolved_commit: Any,
     digest_by_type: Mapping[str, str],
+    payload_by_type: Mapping[str, Mapping[str, Any]],
 ) -> list[str]:
     try:
         payload = json.loads(data.decode("utf-8"))
@@ -1388,39 +1565,238 @@ def _validate_artifact_payload(
         return ["handoff artifact must be a JSON object"]
     failures: list[str] = []
     if artifact_type == "promotion_report":
-        if payload.get("evaluated_commit") != resolved_commit:
-            failures.append(
-                "promotion report evaluated_commit does not match resolved commit"
+        if payload.get("schema_version") != EVAL_REPORT_SCHEMA_VERSION:
+            failures.append("promotion report schema_version is invalid")
+        if payload.get("repository") != "agent-coach":
+            failures.append("promotion report repository is invalid")
+        if payload.get("commit") != resolved_commit:
+            failures.append("promotion report commit does not match resolved commit")
+        if payload.get("git_available") is not True:
+            failures.append("promotion report git availability is invalid")
+        if payload.get("worktree_dirty") is not False:
+            failures.append("promotion report worktree state is invalid")
+        if payload.get("gate_status") != "PASS":
+            failures.append("promotion report gate_status is not PASS")
+        if payload.get("promotion_status") != "PASS":
+            failures.append("promotion report promotion_status is not PASS")
+        if payload.get("threshold_failures") != []:
+            failures.append("promotion report threshold_failures is not empty")
+        if payload.get("promotion_blockers") != []:
+            failures.append("promotion report promotion_blockers is not empty")
+        live_evidence = payload.get("live_evidence")
+        if not isinstance(live_evidence, Mapping):
+            failures.append("promotion report live_evidence is invalid")
+        elif live_evidence.get("status") != "available":
+            failures.append("promotion report live_evidence is unavailable")
+        clean_release = payload.get("clean_release_evidence")
+        if not isinstance(clean_release, Mapping):
+            failures.append("promotion report clean_release_evidence is invalid")
+        elif clean_release.get("status") != "available":
+            failures.append("promotion report clean_release_evidence is unavailable")
+        else:
+            failures.extend(
+                _validate_promotion_report_evidence_links(
+                    live_evidence=live_evidence,
+                    clean_release=clean_release,
+                    resolved_commit=resolved_commit,
+                    digest_by_type=digest_by_type,
+                    payload_by_type=payload_by_type,
+                )
             )
-        if payload.get("promotion_status") not in PROMOTION_STATUSES:
-            failures.append("promotion report status is invalid")
     elif artifact_type in {"forced_live_public", "autonomous_live_public"}:
-        if not payload.get("schema_version"):
-            failures.append("live public schema_version is missing")
-        if payload.get("evaluated_commit") != resolved_commit:
-            failures.append(
-                "live public evaluated_commit does not match resolved commit"
-            )
+        public_failures = validate_live_eval_public_payload(
+            payload,
+            require_threshold=True,
+        )
+        failures.extend(f"live public {failure}" for failure in public_failures)
     elif artifact_type in {"forced_live_wrapper", "autonomous_live_wrapper"}:
         public_type = (
             "forced_live_public"
             if artifact_type == "forced_live_wrapper"
             else "autonomous_live_public"
         )
-        if payload.get("evaluated_commit") != resolved_commit:
-            failures.append(
-                "live wrapper evaluated_commit does not match resolved commit"
-            )
-        public_digest = digest_by_type.get(public_type)
+        if payload.get("schema_version") != LIVE_EVAL_WRAPPER_SCHEMA_VERSION:
+            failures.append("live wrapper schema_version is invalid")
+        if payload.get("provenance") != EXPECTED_LIVE_EVIDENCE_PROVENANCE:
+            failures.append("live wrapper provenance is invalid")
+        if payload.get("commit") != resolved_commit:
+            failures.append("live wrapper commit does not match resolved commit")
+        if payload.get("profile") != "live_provider":
+            failures.append("live wrapper profile is invalid")
+        if payload.get("provider_profile_opt_in") is not True:
+            failures.append("live wrapper opt-in marker is invalid")
+        if not _utc(payload.get("checked_at_utc")):
+            failures.append("live wrapper checked_at_utc is invalid")
+        case_count = payload.get("case_count")
         if (
-            public_digest is not None
-            and payload.get("public_artifact_sha256") != public_digest
+            isinstance(case_count, bool)
+            or not isinstance(case_count, int)
+            or case_count < 5
+        ):
+            failures.append("live wrapper case_count is invalid")
+        task_success_rate = _bounded_rate_value(payload.get("task_success_rate"))
+        if task_success_rate is None:
+            failures.append("live wrapper task_success_rate is invalid")
+        artifacts = _public_artifact_records(payload.get("evidence_artifacts"))
+        if artifacts is None:
+            failures.append("live wrapper evidence_artifacts are invalid")
+        public_digest = digest_by_type.get(public_type)
+        if public_digest is not None and not _wrapper_references_public_digest(
+            artifacts,
+            public_digest,
         ):
             failures.append("live wrapper public digest does not match artifact file")
+        public_payload = payload_by_type.get(public_type)
+        if isinstance(public_payload, Mapping):
+            if public_payload.get("case_count") != case_count:
+                failures.append("live wrapper case_count does not match public")
+            public_rate = _bounded_rate_value(public_payload.get("task_success_rate"))
+            if (
+                public_rate is None
+                or task_success_rate is None
+                or abs(public_rate - task_success_rate) > 0.000001
+            ):
+                failures.append("live wrapper task_success_rate does not match public")
     elif artifact_type == "clean_release":
+        if payload.get("schema_version") != CLEAN_RELEASE_EVIDENCE_SCHEMA_VERSION:
+            failures.append("clean release schema_version is invalid")
+        if payload.get("provenance") != EXPECTED_CLEAN_RELEASE_EVIDENCE_PROVENANCE:
+            failures.append("clean release provenance is invalid")
         if payload.get("commit") != resolved_commit:
             failures.append("clean release commit does not match resolved commit")
+        if payload.get("worktree_dirty") is not False:
+            failures.append("clean release worktree state is invalid")
+        if not _utc(payload.get("checked_at_utc")):
+            failures.append("clean release checked_at_utc is invalid")
+        commands = payload.get("commands")
+        if not isinstance(commands, Mapping):
+            failures.append("clean release commands are invalid")
+        else:
+            for command_id, expected_command in EXPECTED_CLEAN_RELEASE_COMMANDS.items():
+                command = commands.get(command_id)
+                if not isinstance(command, Mapping):
+                    failures.append("clean release command is missing")
+                    continue
+                if command.get("status") != "PASS" or command.get("exit_code") != 0:
+                    failures.append("clean release command did not pass")
+                if command.get("command") != expected_command:
+                    failures.append("clean release command text is invalid")
+                if not SHA256_RE.fullmatch(str(command.get("stdout_sha256") or "")):
+                    failures.append("clean release command stdout_sha256 is invalid")
     return failures
+
+
+def _validate_promotion_report_evidence_links(
+    *,
+    live_evidence: Any,
+    clean_release: Mapping[str, Any],
+    resolved_commit: Any,
+    digest_by_type: Mapping[str, str],
+    payload_by_type: Mapping[str, Mapping[str, Any]],
+) -> list[str]:
+    failures: list[str] = []
+    forced_public = payload_by_type.get("forced_live_public")
+    forced_wrapper = payload_by_type.get("forced_live_wrapper")
+    clean_artifact = payload_by_type.get("clean_release")
+    if not isinstance(live_evidence, Mapping):
+        return ["promotion report live_evidence is invalid"]
+    if live_evidence.get("commit") != resolved_commit:
+        failures.append("promotion report live_evidence commit mismatch")
+    if clean_release.get("commit") != resolved_commit:
+        failures.append("promotion report clean_release commit mismatch")
+    wrapper_rate = None
+    if isinstance(forced_wrapper, Mapping):
+        wrapper_rate = _bounded_rate_value(forced_wrapper.get("task_success_rate"))
+        if live_evidence.get("case_count") != forced_wrapper.get("case_count"):
+            failures.append("promotion report live_evidence case_count mismatch")
+        live_rate = _bounded_rate_value(live_evidence.get("task_success_rate"))
+        if (
+            live_rate is None
+            or wrapper_rate is None
+            or abs(live_rate - wrapper_rate) > 0.000001
+        ):
+            failures.append("promotion report live_evidence task_success_rate mismatch")
+    if isinstance(forced_public, Mapping):
+        public_rate = _bounded_rate_value(forced_public.get("task_success_rate"))
+        if wrapper_rate is not None and (
+            public_rate is None or abs(public_rate - wrapper_rate) > 0.000001
+        ):
+            failures.append("promotion report live_evidence public rate mismatch")
+    artifacts = _public_artifact_records(live_evidence.get("evidence_artifacts"))
+    public_digest = digest_by_type.get("forced_live_public")
+    if public_digest is not None and not _wrapper_references_public_digest(
+        artifacts,
+        public_digest,
+    ):
+        failures.append("promotion report live_evidence artifact digest mismatch")
+    if isinstance(clean_artifact, Mapping):
+        if clean_release.get("checked_at_utc") != clean_artifact.get("checked_at_utc"):
+            failures.append("promotion report clean_release timestamp mismatch")
+        if clean_release.get("commands") != _project_clean_release_commands(
+            clean_artifact.get("commands")
+        ):
+            failures.append("promotion report clean_release commands mismatch")
+    return failures
+
+
+def _bounded_rate_value(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    rate = float(value)
+    if 0.0 <= rate <= 1.0:
+        return rate
+    return None
+
+
+def _public_artifact_records(value: Any) -> list[dict[str, str]] | None:
+    if not isinstance(value, list) or not value:
+        return None
+    records: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            return None
+        label = item.get("label")
+        digest = item.get("sha256")
+        if label != "docs/evidence/live-eval-public.json":
+            return None
+        if not (isinstance(digest, str) and SHA256_RE.fullmatch(digest)):
+            return None
+        records.append({"label": label, "sha256": digest})
+    return records
+
+
+def _project_clean_release_commands(value: Any) -> dict[str, dict[str, object]] | None:
+    if not isinstance(value, Mapping):
+        return None
+    projected: dict[str, dict[str, object]] = {}
+    for command_id, expected_command in EXPECTED_CLEAN_RELEASE_COMMANDS.items():
+        command = value.get(command_id)
+        if not isinstance(command, Mapping):
+            return None
+        stdout_sha256 = command.get("stdout_sha256")
+        if not (isinstance(stdout_sha256, str) and SHA256_RE.fullmatch(stdout_sha256)):
+            return None
+        projected[command_id] = {
+            "command": expected_command,
+            "exit_code": 0,
+            "status": "PASS",
+            "stdout_sha256": stdout_sha256,
+        }
+    return projected
+
+
+def _wrapper_references_public_digest(artifacts: Any, public_digest: str) -> bool:
+    if not isinstance(artifacts, list):
+        return False
+    for item in artifacts:
+        if not isinstance(item, Mapping):
+            continue
+        if (
+            item.get("label") == "docs/evidence/live-eval-public.json"
+            and item.get("sha256") == public_digest
+        ):
+            return True
+    return False
 
 
 def _completed_packages(ledger: Any) -> list[str]:
@@ -1626,16 +2002,45 @@ def _first_parent(repo_root: Path) -> str | None:
 def _git_status_paths(repo_root: Path) -> tuple[str, ...]:
     output = _git_output(repo_root, "status", "--short", "--untracked-files=all")
     paths: list[str] = []
+    for _state, path in _parse_git_status_short(output):
+        if path:
+            paths.append(path)
+    return tuple(dict.fromkeys(paths))
+
+
+def _git_status_file_states(repo_root: Path) -> dict[str, str]:
+    output = _git_output(repo_root, "status", "--short", "--untracked-files=all")
+    states: dict[str, str] = {}
+    for state, path in _parse_git_status_short(output):
+        if path and state is not None:
+            states[path] = state
+    return states
+
+
+def _parse_git_status_short(output: str) -> list[tuple[str | None, str]]:
+    entries: list[tuple[str | None, str]] = []
     for line in output.splitlines():
         if not line.strip():
             continue
+        code = line[:2]
         raw = line[3:]
         if " -> " in raw:
             raw = raw.split(" -> ", 1)[1]
         path = raw.strip().strip('"').replace("\\", "/")
-        if path:
-            paths.append(path)
-    return tuple(dict.fromkeys(paths))
+        entries.append((_short_status_to_state(code), path))
+    return entries
+
+
+def _short_status_to_state(code: str) -> str | None:
+    if "?" in code:
+        return "ADD"
+    if "D" in code:
+        return "DELETE"
+    if "A" in code:
+        return "ADD"
+    if "M" in code:
+        return "MODIFY"
+    return None
 
 
 def _path_in_ref(repo_root: Path, ref: str, path: str) -> bool:

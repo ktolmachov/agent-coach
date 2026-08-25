@@ -1,27 +1,27 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T15:24:10Z",
+  "updated_at_utc": "2026-08-25T15:52:34Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "d5d1fe042423203688ff8690735bd8e7c0cf5d22",
-  "observed_head": "d5d1fe042423203688ff8690735bd8e7c0cf5d22",
-  "observed_origin_main": "22e42e25348dfc6cd1d6aebe0ed1bbb3fb5cec7e",
+  "base_head": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
+  "observed_head": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
+  "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "01360b5113cc23003422d6e82fb25f871d53948240663b27041ce84751c75178",
+  "checkpoint_fingerprint_sha256": "5d199e3339537cc64793faa317bfb02a033845ad73b8db5a1948af8e45fb5369",
   "fingerprinted_files": [
     {
       "path": "docs/prompts/d11_remediation_implementation_prompt.md",
-      "sha256": "007c80202190f0beb5e493b3b0fc8d37f84a7ad2ab3f878963cd5b0b5e482ea5",
+      "sha256": "5a13f943b8a008211ab56d9011324984a5b1ca2d6f52168c78e0bbdff94541ce",
       "state": "MODIFY"
     },
     {
       "path": "scripts/check_d11_remediation_status.py",
-      "sha256": "1359dde307a369c9b46bdba136eab6d67a6a9c88bec8478eaee1442359518491",
+      "sha256": "37315872f79e41ec203ddfc5dbb740b62e5720d6d43c8b40df3c73397768868c",
       "state": "MODIFY"
     },
     {
       "path": "tests/test_d11_remediation_status.py",
-      "sha256": "0fa96cb0b6eff1227f19143a0c16b52c9a967a571847d27f7413a7dfe4d99897",
+      "sha256": "f228891370fbaee0a8bf940aafc264fadd7e5e379ca1514de65ae1e5181e0d90",
       "state": "MODIFY"
     }
   ],
@@ -38,22 +38,22 @@
   "changed_files": [
     {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package A COMPLETE+PASS READY_TO_COMMIT on an A-only tree.",
+      "purpose": "Record Package A audit-remediation READY_TO_COMMIT checkpoint.",
       "state": "MODIFY"
     },
     {
       "path": "docs/prompts/d11_remediation_implementation_prompt.md",
-      "purpose": "Package A READY_TO_COMMIT checkpoint after predecessor-guard fix.",
+      "purpose": "Package A audit-remediation validator hardening.",
       "state": "MODIFY"
     },
     {
       "path": "scripts/check_d11_remediation_status.py",
-      "purpose": "Package A READY_TO_COMMIT checkpoint after predecessor-guard fix.",
+      "purpose": "Package A audit-remediation validator hardening.",
       "state": "MODIFY"
     },
     {
       "path": "tests/test_d11_remediation_status.py",
-      "purpose": "Package A READY_TO_COMMIT checkpoint after predecessor-guard fix.",
+      "purpose": "Package A audit-remediation validator hardening.",
       "state": "MODIFY"
     }
   ],
@@ -123,12 +123,11 @@
     "full_pytest_suite",
     "live_provider_eval",
     "fresh_clone_clean_release",
-    "d11_promotion_gate",
-    "package_a_git_commit"
+    "d11_promotion_gate"
   ],
   "remaining_risks": [
-    "Premature local A commit d5d1fe0 remains historical schema 1.0.0 and is not rewritten.",
-    "B1 remains HOLD in stash d11-b1-c2-isolation-after-output-path-fix until this checkpoint is on clean HEAD.",
+    "This audit-remediation checkpoint is not yet committed and must be validated again on clean HEAD before B1 resumes.",
+    "B1 remains HOLD in stash d11-b1-c2-isolation-after-output-path-fix until an explicit B1 resume.",
     "R-16 remains deferred to C2 for non-acceptance bare python commands.",
     "Windows localhost acceptance flake is not claimed eliminated.",
     "D11 promotion remains HOLD."
@@ -136,7 +135,7 @@
   "blockers": [],
   "last_completed_package": "A",
   "next_allowed_package": "B1",
-  "exact_resume_instruction": "Commit this A READY_TO_COMMIT snapshot locally, verify the validator on clean HEAD, then restore stash d11-b1-c2-isolation-after-output-path-fix to resume B1 as HOLD. Do not start B2. Keep AUTONOMOUS_LIVE_POLICY=DOCUMENTED_LIMITATION.",
+  "exact_resume_instruction": "Commit this A audit-remediation READY_TO_COMMIT snapshot locally, verify scripts/check_d11_remediation_status.py on clean HEAD, then restore stash d11-b1-c2-isolation-after-output-path-fix only for an explicit B1 resume. Do not start B2. Keep AUTONOMOUS_LIVE_POLICY=DOCUMENTED_LIMITATION.",
   "package_ledger": [
     {
       "package": "A",
@@ -203,6 +202,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "9e4b1377169a58f73eb508c29d32abf6e2f3d2bf2e3ea148475c4276f2244db3",
       "entry_sha256": "a5e3772f83e0577f1de2bda9d8fb596ec3a4121b187ce76f17257c8f1eb73b73"
+    },
+    {
+      "package": "A",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
+      "completed_at_utc": "2026-08-25T15:52:34Z",
+      "evidence_summary": "Closed audit defects for semantic E2 evidence validation, committed predecessor proof, valid committed E1 promotion provenance, current origin binding, and STATUS_FILE state checks.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "a5e3772f83e0577f1de2bda9d8fb596ec3a4121b187ce76f17257c8f1eb73b73",
+      "entry_sha256": "4e2e6236d7994574ff2bc95d5f490c08ad268bc4dc3ce3f4489460a54a9cf4bb"
     }
   ]
 }

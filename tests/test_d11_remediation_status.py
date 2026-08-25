@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts import check_d11_remediation_status as status
+from scripts import run_live_eval
 
 HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 SESSION = "11111111-1111-4111-8111-111111111111"
@@ -366,6 +367,15 @@ def test_package_a_ready_to_commit_survives_clean_commit_without_rewrite(
     status.write_status_document(status_path, b1)
     assert _validate_status_file(status_path, repo) == []
 
+    false_add = deepcopy(b1)
+    for item in false_add["changed_files"]:
+        if item["path"] == status.STATUS_FILE:
+            item["state"] = "ADD"
+    assert "STATUS_FILE state does not match repository" in status.validate_status(
+        false_add,
+        repo_root=repo,
+    )
+
 
 def test_b1_requires_committed_ready_to_commit_predecessor(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
@@ -398,6 +408,68 @@ def test_b1_requires_committed_ready_to_commit_predecessor(tmp_path: Path) -> No
     status.write_status_document(status_path, b1)
     failures = status.validate_status(b1, repo_root=repo)
     assert status.PREDECESSOR_READY_CHECKPOINT_FAILURE in failures
+
+
+def test_b1_predecessor_rejects_unexpected_committed_diff(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    docs = repo / "docs"
+    tests_dir = repo / "tests"
+    docs.mkdir()
+    tests_dir.mkdir()
+    plan = docs / "implementation_plan.md"
+    plan.write_text("base plan\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "docs/implementation_plan.md")
+    _git(repo, "commit", "-m", "base")
+    base = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    plan.write_text("package A plan\n", encoding="utf-8", newline="\n")
+    acceptance = tests_dir / "test_acceptance_demo.py"
+    acceptance.write_text("assert True\n", encoding="utf-8", newline="\n")
+    ready = _complete_package_a_for_repo(repo, base_head=base, package="A")
+    (repo / "unexpected.txt").write_text("not in package A\n", encoding="utf-8")
+    status_path = repo / status.STATUS_FILE
+    status.write_status_document(status_path, ready)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "package A with extra file")
+    resolved = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    b1 = _b1_from_completed_a(ready, resolved_head=resolved)
+    status.write_status_document(status_path, b1)
+    failures = status.validate_status(b1, repo_root=repo)
+
+    assert status.PREDECESSOR_READY_CHECKPOINT_FAILURE in failures
+
+
+def test_clean_ready_checkpoint_verifies_committed_status_file_state(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    docs = repo / "docs"
+    docs.mkdir()
+    plan = docs / "implementation_plan.md"
+    plan.write_text("base plan\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "docs/implementation_plan.md")
+    _git(repo, "commit", "-m", "base")
+    base = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    plan.write_text("package A plan\n", encoding="utf-8", newline="\n")
+    ready = _complete_package_a_for_repo(repo, base_head=base, package="A")
+    status_path = repo / status.STATUS_FILE
+    status.write_status_document(status_path, ready)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "package A")
+
+    false_modify = deepcopy(ready)
+    for item in false_modify["changed_files"]:
+        if item["path"] == status.STATUS_FILE:
+            item["state"] = "MODIFY"
+    failures = status.validate_status(false_modify, repo_root=repo)
+
+    assert "STATUS_FILE state does not match repository" in failures
 
 
 def test_b1_predecessor_requires_causal_first_parent(tmp_path: Path) -> None:
@@ -571,6 +643,168 @@ def test_promotion_pass_requires_frozen_clean_released() -> None:
 
     assert "promotion PASS requires CLEAN worktree" in dirty_failures
     assert "promotion PASS requires FROZEN_REVIEWED" in frozen_failures
+
+
+def test_promotion_artifacts_require_real_current_schemas(tmp_path: Path) -> None:
+    payload = _promotion_pass_handoff()
+    _write_handoff_artifacts(tmp_path, payload)
+
+    report = tmp_path / "promotion_report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "promotion_status": "HOLD",
+                "legacy_commit": payload["resolved_completion_commit"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    for item in payload["artifacts"]:
+        if item["artifact_type"] == "promotion_report":
+            item["size_bytes"] = report.stat().st_size
+            item["sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
+
+    failures = status.validate_status(
+        payload,
+        handoff=True,
+        artifact_dir=tmp_path,
+    )
+
+    assert "promotion report schema_version is invalid" in failures
+    assert "promotion report commit does not match resolved commit" in failures
+    assert "promotion report promotion_status is not PASS" in failures
+
+
+def test_promotion_artifacts_reject_semantically_empty_json(tmp_path: Path) -> None:
+    payload = _promotion_pass_handoff()
+    for item in payload["artifacts"]:
+        artifact_type = str(item["artifact_type"])
+        if artifact_type == "forced_live_public":
+            data = {"schema_version": "agent-coach-live-eval-public/1.0.0"}
+        elif artifact_type == "forced_live_wrapper":
+            data = {
+                "schema_version": "agent-coach-live-eval-evidence/1.0.0",
+                "commit": payload["resolved_completion_commit"],
+            }
+        elif artifact_type == "clean_release":
+            data = {"commit": payload["resolved_completion_commit"]}
+        else:
+            data = {
+                "schema_version": "agent-coach-diploma-eval-report/1.0.0",
+                "repository": "agent-coach",
+                "commit": payload["resolved_completion_commit"],
+                "git_available": True,
+                "worktree_dirty": False,
+                "gate_status": "PASS",
+                "promotion_status": "PASS",
+                "threshold_failures": [],
+                "promotion_blockers": [],
+                "live_evidence": {"status": "available"},
+                "clean_release_evidence": {"status": "available"},
+            }
+        encoded = json.dumps(data, separators=(",", ":")).encode("utf-8")
+        item["size_bytes"] = len(encoded)
+        item["sha256"] = hashlib.sha256(encoded).hexdigest()
+        (tmp_path / str(item["filename"])).write_bytes(encoded)
+
+    failures = status.validate_status(
+        payload,
+        handoff=True,
+        artifact_dir=tmp_path,
+    )
+
+    assert "live public live eval case registry is missing" in failures
+    assert "live wrapper provenance is invalid" in failures
+    assert "clean release commands are invalid" in failures
+    assert "promotion report live_evidence commit mismatch" in failures
+
+
+def test_promotion_pass_requires_clean_git_worktree(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    docs = repo / "docs"
+    docs.mkdir()
+    plan = docs / "implementation_plan.md"
+    plan.write_text("base plan\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "docs/implementation_plan.md")
+    _git(repo, "commit", "-m", "base")
+    base = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    plan.write_text("package E1 plan\n", encoding="utf-8", newline="\n")
+    ready = _e1_ready_to_commit_for_repo(repo, base_head=base)
+    status_path = repo / status.STATUS_FILE
+    status.write_status_document(status_path, ready)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "package E1")
+    resolved = _git_text(repo, "rev-parse", "HEAD").strip()
+    tracked = status.load_json_object(status_path)
+
+    handoff = _promotion_pass_handoff()
+    handoff["base_head"] = tracked["base_head"]
+    handoff["observed_head"] = resolved
+    handoff["observed_origin_main"] = resolved
+    handoff["resolved_completion_commit"] = resolved
+    handoff["autonomous_live_policy"] = tracked["autonomous_live_policy"]
+    e2_entry = _ledger_entry(handoff)
+    e2_entry["previous_entry_sha256"] = tracked["package_ledger"][-1]["entry_sha256"]
+    e2_entry["entry_sha256"] = status.ledger_entry_digest(e2_entry)
+    handoff["package_ledger"] = [*tracked["package_ledger"], e2_entry]
+    _write_handoff_artifacts(tmp_path, handoff)
+    plan.write_text("dirty after E2 handoff\n", encoding="utf-8", newline="\n")
+
+    failures = status.validate_status(
+        handoff,
+        handoff=True,
+        repo_root=repo,
+        artifact_dir=tmp_path,
+    )
+
+    assert "promotion PASS requires clean git worktree" in failures
+
+
+def test_promotion_pass_requires_valid_committed_e1_checkpoint(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    docs = repo / "docs"
+    docs.mkdir()
+    plan = docs / "implementation_plan.md"
+    plan.write_text("base plan\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "docs/implementation_plan.md")
+    _git(repo, "commit", "-m", "base")
+    base = _git_text(repo, "rev-parse", "HEAD").strip()
+
+    plan.write_text("package E1 plan\n", encoding="utf-8", newline="\n")
+    ready = _e1_ready_to_commit_for_repo(repo, base_head=base)
+    ready["checkpoint_fingerprint_sha256"] = FILE_SHA
+    status_path = repo / status.STATUS_FILE
+    status.write_status_document(status_path, ready)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "invalid package E1")
+    resolved = _git_text(repo, "rev-parse", "HEAD").strip()
+    tracked = status.load_json_object(status_path)
+
+    handoff = _promotion_pass_handoff()
+    handoff["base_head"] = tracked["base_head"]
+    handoff["observed_head"] = resolved
+    handoff["observed_origin_main"] = resolved
+    handoff["resolved_completion_commit"] = resolved
+    handoff["autonomous_live_policy"] = tracked["autonomous_live_policy"]
+    e2_entry = _ledger_entry(handoff)
+    e2_entry["previous_entry_sha256"] = tracked["package_ledger"][-1]["entry_sha256"]
+    e2_entry["entry_sha256"] = status.ledger_entry_digest(e2_entry)
+    handoff["package_ledger"] = [*tracked["package_ledger"], e2_entry]
+    _write_handoff_artifacts(tmp_path, handoff)
+
+    failures = status.validate_status(
+        handoff,
+        handoff=True,
+        repo_root=repo,
+        artifact_dir=tmp_path,
+    )
+
+    assert "promotion PASS requires valid committed E1 checkpoint" in failures
 
 
 def test_promotion_pass_without_artifact_dir_fails() -> None:
@@ -949,40 +1183,134 @@ def _minimal_artifact_payload(
     resolved_commit: str,
     *,
     public_digest: str | None = None,
+    public_payload: dict[str, Any] | None = None,
+    clean_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if artifact_type == "promotion_report":
+        case_count = public_payload["case_count"] if public_payload else 5
+        task_success_rate = (
+            public_payload["task_success_rate"] if public_payload else 1.0
+        )
+        public_record = {
+            "label": "docs/evidence/live-eval-public.json",
+            "sha256": public_digest or FILE_SHA,
+        }
+        clean_commands = status._project_clean_release_commands(
+            clean_payload.get("commands") if clean_payload else None
+        ) or _clean_release_command_records()
         return {
+            "schema_version": "agent-coach-diploma-eval-report/1.0.0",
+            "repository": "agent-coach",
+            "commit": resolved_commit,
+            "git_available": True,
+            "worktree_dirty": False,
+            "gate_status": "PASS",
             "promotion_status": "PASS",
-            "evaluated_commit": resolved_commit,
+            "threshold_failures": [],
+            "promotion_blockers": [],
+            "live_evidence": {
+                "status": "available",
+                "required_for_promotion": True,
+                "task_success_rate": task_success_rate,
+                "case_count": case_count,
+                "commit": resolved_commit,
+                "profile": "live_provider",
+                "provider_profile_opt_in": True,
+                "checked_at_utc": UTC,
+                "evidence_artifacts": [public_record],
+                "provenance": status.EXPECTED_LIVE_EVIDENCE_PROVENANCE,
+                "evidence_schema_version": "agent-coach-live-eval-evidence/1.0.0",
+            },
+            "clean_release_evidence": {
+                "status": "available",
+                "required_for_promotion": True,
+                "commit": resolved_commit,
+                "checked_at_utc": UTC,
+                "commands": clean_commands,
+                "provenance": status.EXPECTED_CLEAN_RELEASE_EVIDENCE_PROVENANCE,
+                "evidence_schema_version": (
+                    "agent-coach-clean-release-evidence/1.0.0"
+                ),
+            },
         }
     if artifact_type in {"forced_live_public", "autonomous_live_public"}:
-        return {
-            "schema_version": "agent-coach-live-eval-public/test",
-            "evaluated_commit": resolved_commit,
-        }
+        payload = run_live_eval.run_live_eval(scripted=True)
+        payload["mode"] = "live_provider"
+        payload["contains_scripted_responses"] = False
+        payload["provider_profile_opt_in"] = True
+        payload["checked_at_utc"] = UTC
+        return payload
     if artifact_type in {"forced_live_wrapper", "autonomous_live_wrapper"}:
+        case_count = public_payload["case_count"] if public_payload else 5
+        task_success_rate = (
+            public_payload["task_success_rate"] if public_payload else 1.0
+        )
         return {
-            "evaluated_commit": resolved_commit,
-            "public_artifact_sha256": public_digest or FILE_SHA,
+            "schema_version": "agent-coach-live-eval-evidence/1.0.0",
+            "provenance": status.EXPECTED_LIVE_EVIDENCE_PROVENANCE,
+            "commit": resolved_commit,
+            "profile": "live_provider",
+            "provider_profile_opt_in": True,
+            "checked_at_utc": UTC,
+            "case_count": case_count,
+            "task_success_rate": task_success_rate,
+            "evidence_artifacts": [
+                {
+                    "label": "docs/evidence/live-eval-public.json",
+                    "sha256": public_digest or FILE_SHA,
+                }
+            ],
         }
-    return {"commit": resolved_commit}
+    return {
+        "schema_version": "agent-coach-clean-release-evidence/1.0.0",
+        "provenance": status.EXPECTED_CLEAN_RELEASE_EVIDENCE_PROVENANCE,
+        "commit": resolved_commit,
+        "worktree_dirty": False,
+        "checked_at_utc": UTC,
+        "commands": _clean_release_command_records(),
+    }
+
+
+def _clean_release_command_records() -> dict[str, dict[str, object]]:
+    return {
+        command_id: {
+            "command": command,
+            "exit_code": 0,
+            "status": "PASS",
+            "stdout_sha256": FILE_SHA,
+        }
+        for command_id, command in status.EXPECTED_CLEAN_RELEASE_COMMANDS.items()
+    }
 
 
 def _write_handoff_artifacts(directory: Path, payload: dict[str, Any]) -> None:
     resolved = str(payload["resolved_completion_commit"])
     digest_by_type: dict[str, str] = {}
+    payload_by_type: dict[str, dict[str, Any]] = {}
     for item in payload["artifacts"]:
         artifact_type = str(item["artifact_type"])
         if artifact_type.endswith("_wrapper"):
             continue
+        public_payload = payload_by_type.get(
+            "forced_live_public",
+            payload_by_type.get("autonomous_live_public"),
+        )
+        clean_payload = payload_by_type.get("clean_release")
         data = json.dumps(
-            _minimal_artifact_payload(artifact_type, resolved),
+            _minimal_artifact_payload(
+                artifact_type,
+                resolved,
+                public_digest=digest_by_type.get("forced_live_public"),
+                public_payload=public_payload,
+                clean_payload=clean_payload,
+            ),
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
         item["size_bytes"] = len(data)
         item["sha256"] = hashlib.sha256(data).hexdigest()
         digest_by_type[artifact_type] = str(item["sha256"])
+        payload_by_type[artifact_type] = json.loads(data.decode("utf-8"))
         (directory / str(item["filename"])).write_bytes(data)
     for item in payload["artifacts"]:
         artifact_type = str(item["artifact_type"])
@@ -998,6 +1326,7 @@ def _write_handoff_artifacts(directory: Path, payload: dict[str, Any]) -> None:
                 artifact_type,
                 resolved,
                 public_digest=digest_by_type.get(public_type),
+                public_payload=payload_by_type.get(public_type),
             ),
             ensure_ascii=False,
             separators=(",", ":"),
