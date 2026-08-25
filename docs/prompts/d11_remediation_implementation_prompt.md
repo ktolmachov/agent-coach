@@ -76,65 +76,28 @@ validator и ledger.
 
 | Package | Status | Verdict | Notes |
 | --- | --- | --- | --- |
-| A | COMPLETE | PASS | Base checkpoint `f045f0c` is on clean HEAD; current audit-remediation READY_TO_COMMIT snapshot must be committed and validated before B1. Do not start B2. |
-| B1 | IN_PROGRESS | HOLD | Isolated in stash `d11-b1-c2-isolation-after-output-path-fix`; resume only after the current A audit-remediation checkpoint is clean. Do not start B2. |
-| B2 | NOT_STARTED | NOT_RUN | Do not start. |
-| C1 | NOT_STARTED | NOT_RUN | |
-| C2 | NOT_STARTED | NOT_RUN | Owns remaining R-16 bare-`python` commands outside acceptance. |
-| D0 | NOT_STARTED | NOT_RUN | |
-| D1 | NOT_STARTED | NOT_RUN | |
-| D2 | NOT_STARTED | NOT_RUN | |
-| E1 | NOT_STARTED | NOT_RUN | |
-| E2 | NOT_STARTED | NOT_RUN | Live/network still forbidden. |
+| A | COMPLETE | PASS | Scope reconciliation, acceptance-demo evidence, status ledger/validator hardening and E2 provenance checks are committed. Latest completed A ledger head: `f045f0c`. |
+| B1 | COMPLETE | PASS | Historical live artifact boundary and causal live registry/evidence harness are complete. Latest completed B1 ledger head: `341e140`. |
+| B2 | COMPLETE | PASS | Wrapper and promotion-gate harness behavior is verified with focused offline tests. Latest completed B2 ledger head: `812318a`. |
+| C1 | COMPLETE | PASS | README/eval-gate/tool-SOP documentation and threshold honesty updates are complete. Latest completed C1 ledger head: `d243398`. |
+| C2 | COMPLETE | PASS | Process docs, CI/release hygiene and remaining R-16 command handling are complete. Latest completed C2 ledger head: `e4178bb`. |
+| D0 | COMPLETE | PASS | Eval v2 discovery/specification is complete; frozen registry remains 47 public synthetic cases. Latest completed D0 ledger head: `7b3b3f7`. |
+| D1 | COMPLETE | PASS | Eval suite v2 cases/evaluators are complete with separate denominators for retrieval, security, budget and provider-contract behavior. Latest completed D1 ledger head: `9246d0e`. |
+| D2 | COMPLETE | PASS | Eval metrics/docs/release awareness are complete; eval v2 docs and release checks remain PASS. Latest completed D2 ledger head: `d0e9139`. |
+| E1 | COMPLETE | PASS | Autonomous planner eval schema, offline scripted harness and non-promotion semantics are complete. Latest completed E1 ledger head: `a1cfad7`; local `main` post-merge checkpoint: `d764927`. |
+| E2 | NOT_STARTED | NOT_RUN | Next allowed package. Live/network/provider cost remain forbidden until separate `E2_HANDOFF_REF` and explicit approvals are provided. |
 | F1-F4, G | deferred | — | Not part of current D11 promotion sequence. |
 
-Package A, already done:
+Completed through E1:
 
-- acceptance-demo включён в D11 write-set, implemented artifacts и rollback;
-- `829df29` оставлен только как historical evidence, не current candidate;
-- bounded reproducibility diagnostics различают `same_accepted_response` и
-  `same_result_projection` без печати полного response;
-- Windows localhost smoke: 10/10 repeats, flake not claimed eliminated;
-- AUTONOMOUS_LIVE_POLICY = `DOCUMENTED_LIMITATION`;
-- schema `2.0.0` tracked/handoff contract: `READY_TO_COMMIT` without
-  self-referential `resolved_completion_commit`;
-- E2 promotion PASS fail-closed: `promotion_report`, `FROZEN_REVIEWED`,
-  `CLEAN`, `RELEASED` and verified artifact files;
-- status validator CLI is rechecked after the review fixes;
-- A-only public docs describe HEAD runtime: tracked
-  `docs/evidence/live-eval-public.json` remains the current path, and strict
-  `--release` still requires that artifact. B1 historical-path claims were
-  reverted out of overlapping A docs;
-- later packages require HEAD:`docs/d11_remediation_status.json` to be a
-  schema 2.0.0 READY_TO_COMMIT predecessor with a causal first-parent
-  checkpoint; schema 1.0.0/`UNCOMMITTED` HEAD cannot open B1;
-- local A checkpoint `f045f0c` is committed; validator PASSes on clean HEAD
-  with `resolved_completion_commit` still null and derived HEAD bound from
-  Git; `origin/main` currently also resolves to `f045f0c`, so earlier
-  no-push wording is stale; premature `d5d1fe0` is first parent and is not
-  rewritten;
-- audit-remediation validator now checks real E2 promotion/live-wrapper/clean
-  release evidence schemas, actual clean Git worktree for E2 PASS, and the
-  Git-derived state of `STATUS_FILE`;
-- second audit-remediation pass requires semantically complete live public
-  artifacts, live wrappers, clean-release evidence and promotion reports;
-  committed predecessor checkpoints must prove committed diff/fingerprint/
-  write-set consistency, and E2 promotion must start from a valid committed E1
-  READY_TO_COMMIT checkpoint;
-- B1/C2 leftovers are isolated in stash
-  `d11-b1-c2-isolation-after-output-path-fix` and are not A artifacts.
-
-Package A, still open:
-
-- R-16 for non-acceptance `python` commands is deferred to C2.
-
-Package B1, present as leftovers, not the active package:
-
-- A READY_TO_COMMIT checkpoint is already committed and validated on clean
-  HEAD; additionally commit and validate the current A audit-remediation
-  snapshot before restoring stash `d11-b1-c2-isolation-after-output-path-fix`
-  for an explicit B1 resume;
-- do not start B2.
+- A-E1 are `COMPLETE + PASS` in `docs/d11_remediation_status.json`.
+- `AUTONOMOUS_LIVE_POLICY = DOCUMENTED_LIMITATION`.
+- `network_provider_calls = 0` and `provider_cost_status = zero`.
+- `d11_promotion_status = HOLD` because E2 live/clean-release evidence has not
+  been run and requires explicit external approval.
+- `next_allowed_package = E2`; no F/G work is authorized by this prompt.
+- Local `main` has been fast-forwarded through the D11 offline remediation and
+  includes post-merge checkpoint `d764927`.
 
 ## Master-prompt
 
