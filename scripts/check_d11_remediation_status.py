@@ -1757,12 +1757,25 @@ def _public_artifact_records(value: Any) -> list[dict[str, str]] | None:
             return None
         label = item.get("label")
         digest = item.get("sha256")
-        if label != "docs/evidence/live-eval-public.json":
+        if not _public_artifact_label(label):
             return None
         if not (isinstance(digest, str) and SHA256_RE.fullmatch(digest)):
             return None
         records.append({"label": label, "sha256": digest})
     return records
+
+
+def _public_artifact_label(value: Any) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    if value == "docs/evidence/live-eval-public.json":
+        return True
+    return (
+        "/" not in value
+        and "\\" not in value
+        and value.endswith(".json")
+        and BASENAME_RE.fullmatch(value) is not None
+    )
 
 
 def _project_clean_release_commands(value: Any) -> dict[str, dict[str, object]] | None:
@@ -1791,10 +1804,9 @@ def _wrapper_references_public_digest(artifacts: Any, public_digest: str) -> boo
     for item in artifacts:
         if not isinstance(item, Mapping):
             continue
-        if (
-            item.get("label") == "docs/evidence/live-eval-public.json"
-            and item.get("sha256") == public_digest
-        ):
+        if _public_artifact_label(item.get("label")) and item.get(
+            "sha256"
+        ) == public_digest:
             return True
     return False
 

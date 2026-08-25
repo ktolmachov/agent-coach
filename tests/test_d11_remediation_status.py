@@ -675,6 +675,25 @@ def test_promotion_artifacts_require_real_current_schemas(tmp_path: Path) -> Non
     assert "promotion report promotion_status is not PASS" in failures
 
 
+def test_promotion_artifacts_accept_external_public_basename(
+    tmp_path: Path,
+) -> None:
+    payload = _promotion_pass_handoff()
+    _write_handoff_artifacts(
+        tmp_path,
+        payload,
+        public_label="agent-coach-forced-live-public.json",
+    )
+
+    failures = status.validate_status(
+        payload,
+        handoff=True,
+        artifact_dir=tmp_path,
+    )
+
+    assert failures == ["promotion PASS requires git repository"]
+
+
 def test_promotion_artifacts_reject_semantically_empty_json(tmp_path: Path) -> None:
     payload = _promotion_pass_handoff()
     for item in payload["artifacts"]:
@@ -1183,6 +1202,7 @@ def _minimal_artifact_payload(
     resolved_commit: str,
     *,
     public_digest: str | None = None,
+    public_label: str = "docs/evidence/live-eval-public.json",
     public_payload: dict[str, Any] | None = None,
     clean_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -1192,7 +1212,7 @@ def _minimal_artifact_payload(
             public_payload["task_success_rate"] if public_payload else 1.0
         )
         public_record = {
-            "label": "docs/evidence/live-eval-public.json",
+            "label": public_label,
             "sha256": public_digest or FILE_SHA,
         }
         clean_commands = status._project_clean_release_commands(
@@ -1256,7 +1276,7 @@ def _minimal_artifact_payload(
             "task_success_rate": task_success_rate,
             "evidence_artifacts": [
                 {
-                    "label": "docs/evidence/live-eval-public.json",
+                    "label": public_label,
                     "sha256": public_digest or FILE_SHA,
                 }
             ],
@@ -1283,7 +1303,12 @@ def _clean_release_command_records() -> dict[str, dict[str, object]]:
     }
 
 
-def _write_handoff_artifacts(directory: Path, payload: dict[str, Any]) -> None:
+def _write_handoff_artifacts(
+    directory: Path,
+    payload: dict[str, Any],
+    *,
+    public_label: str = "docs/evidence/live-eval-public.json",
+) -> None:
     resolved = str(payload["resolved_completion_commit"])
     digest_by_type: dict[str, str] = {}
     payload_by_type: dict[str, dict[str, Any]] = {}
@@ -1301,6 +1326,7 @@ def _write_handoff_artifacts(directory: Path, payload: dict[str, Any]) -> None:
                 artifact_type,
                 resolved,
                 public_digest=digest_by_type.get("forced_live_public"),
+                public_label=public_label,
                 public_payload=public_payload,
                 clean_payload=clean_payload,
             ),
@@ -1326,6 +1352,7 @@ def _write_handoff_artifacts(directory: Path, payload: dict[str, Any]) -> None:
                 artifact_type,
                 resolved,
                 public_digest=digest_by_type.get(public_type),
+                public_label=public_label,
                 public_payload=payload_by_type.get(public_type),
             ),
             ensure_ascii=False,
