@@ -1,17 +1,17 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T19:34:11Z",
+  "updated_at_utc": "2026-08-25T19:46:05Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "0feadb4b678d638c338318467a8a891128c6eef2",
-  "observed_head": "0feadb4b678d638c338318467a8a891128c6eef2",
-  "observed_origin_main": "0feadb4b678d638c338318467a8a891128c6eef2",
+  "base_head": "c06bb13a5dba000a59e2b6f6653dcf55b4f47724",
+  "observed_head": "c06bb13a5dba000a59e2b6f6653dcf55b4f47724",
+  "observed_origin_main": "c06bb13a5dba000a59e2b6f6653dcf55b4f47724",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "0c6ad8451948486b72a2144236f81430c76bce580f88a09b54fdeb8a89c6a357",
+  "checkpoint_fingerprint_sha256": "5ec03f2d1c5270cf020942a0f89e8b07d5cef81019c781e4f3d0f81d37c5b289",
   "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T19:34:11Z",
+  "session_started_at_utc": "2026-08-25T19:46:05Z",
   "lease_status": "RELEASED",
   "current_package": "E1",
   "implementation_status": "COMPLETE",
@@ -22,7 +22,7 @@
   "changed_files": [
     {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record E1 READY_TO_COMMIT checkpoint after external live promotion gate contract fix.",
+      "purpose": "Record E1 READY_TO_COMMIT checkpoint after origin/main synchronized with corrective gate commit.",
       "state": "MODIFY"
     }
   ],
@@ -368,6 +368,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "1659f6b5007af89347736736a3c6aaa219010d9a1f6f8983a02f6d9896527b0c",
       "entry_sha256": "345d459a2ac0aeda3bd0fdbbdc55118ef04de53833a126b27e4167d68b0b4b63"
+    },
+    {
+      "package": "E1",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "c06bb13a5dba000a59e2b6f6653dcf55b4f47724",
+      "completed_at_utc": "2026-08-25T19:46:05Z",
+      "evidence_summary": "Recorded E1 checkpoint after origin/main synchronized with external live-wrapper gate fix; E2 remains next and promotion HOLD.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "345d459a2ac0aeda3bd0fdbbdc55118ef04de53833a126b27e4167d68b0b4b63",
+      "entry_sha256": "3834c705d508e26269b18023608a5448f8d212a7bec82c267eec6783d1704583"
     }
   ]
 }
