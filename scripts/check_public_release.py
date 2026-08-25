@@ -228,7 +228,7 @@ ALLOWED_PRIVATE_PATH_FRAGMENTS = {
             "agent_coach",
             "data",
             "diploma_eval_cases.json",
-            suffix=". It contains 27 public synthetic",
+            suffix=". It contains 47 public synthetic",
         ),
     },
 }

@@ -806,7 +806,7 @@ Implemented artifacts:
 
 D11 micro-slice evidence:
 
-- exactly 27 frozen public synthetic cases are present and schema-valid;
+- exactly 47 frozen public synthetic cases are present and schema-valid;
 - suite version, public provenance, frozen non-empty id order and canonical
   suite hash are enforced before an eval suite can run;
 - KPI thresholds are fixed before any live evidence file is accepted;
@@ -849,6 +849,10 @@ D11 micro-slice evidence:
   literals, three exact runtime budget stop reasons including positive offline
   `estimated_cost_usd` for MAX_COST, and three scripted provider-contract
   fail-closed cases. No D8 corpus mutation is part of this discovery.
+- D1 promoted that registry to the packaged eval suite version `2.0.0`; the
+  offline gate now reports retrieval-negative rejection, provider-contract
+  fail-closed, security-containment and exact budget stop-reason denominators,
+  and still reports zero real provider spend.
 
 Non-goals:
 
@@ -862,7 +866,7 @@ Non-goals:
 
 Promotion thresholds:
 
-- exactly 27 registered frozen cases present and schema-valid;
+- exactly 47 registered frozen cases present and schema-valid;
 - suite version, provenance, case ids and canonical suite hash match the public
   registry;
 - offline golden gate 100% on non-retrieval-top1 golden cases;

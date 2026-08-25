@@ -200,10 +200,13 @@ Strict final release mode:
 python scripts/check_public_release.py --release
 ```
 
-The D11 offline eval gate freezes exactly 27 public synthetic cases. It requires
-100% offline golden pass rate, at least 80% retrieval top-1 accuracy and zero
-invalid or unknown executed tools, security failures, hidden writes and
-grounded answers without citation. The current offline gate reports
+The D11 offline eval gate freezes exactly 47 public synthetic cases. It reports
+separate denominators for offline golden pass rate, retrieval top-1 accuracy,
+retrieval negative rejection, adapter contract fail-closed behavior, security
+containment and exact budget stop reasons. It requires 100% offline golden pass
+rate, at least 80% retrieval top-1 accuracy and zero invalid or unknown
+executed tools, security failures, hidden writes and grounded answers without
+citation. The current offline gate reports
 `gate_status: PASS`; `promotion_status` remains `HOLD` until valid opt-in live
 evidence and clean fresh-clone release evidence are supplied for the reviewed
 immutable commit.

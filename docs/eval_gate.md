@@ -59,14 +59,15 @@ metrics and limitations. If Git HEAD cannot be read, promotion is blocked with
 ## Suite
 
 The frozen case manifest is packaged as
-`src/agent_coach/data/diploma_eval_cases.json`. It contains 27 public synthetic
+`src/agent_coach/data/diploma_eval_cases.json`. It contains 47 public synthetic
 cases covering retrieval, no-answer, ambiguous query, multi-step study session,
 quiz/cards branch, validation, timeout, rate limit, dependency failure,
-cost/step limit, prompt injection, fake secret redaction, separate PII/private
-path redaction, unknown tool and malformed native function calls.
+runtime budget stops, prompt injection, fake secret redaction, separate
+PII/private path redaction, retrieval boundary cases, unknown tools, malformed
+native function calls and scripted provider-contract fail-closed cases.
 
 The loader validates the exact registered suite: schema version, suite version,
-public provenance, exactly 27 non-empty case ids in frozen order, frozen KPI
+public provenance, exactly 47 non-empty case ids in frozen order, frozen KPI
 thresholds, category/type coverage and canonical suite hash. `--suite` is only
 for supplying the registered suite from another path; modified or external
 suites fail closed. Custom suite JSON is capped at 128000 bytes.

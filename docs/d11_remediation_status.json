@@ -1,35 +1,45 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:34:04Z",
+  "updated_at_utc": "2026-08-25T16:38:02Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "9246d0edd57e3a14705d43669ccf2ada8df28c5a",
-  "observed_head": "9246d0edd57e3a14705d43669ccf2ada8df28c5a",
+  "base_head": "4b504da33739fb4aac19b1166f11ad733feb8653",
+  "observed_head": "4b504da33739fb4aac19b1166f11ad733feb8653",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "aaa13e2aa39411471d35872afdb4b0ffe4c4d0e66ea58e24378435748936e636",
+  "checkpoint_fingerprint_sha256": "3eac06220c829f4dfff376d8c41cab8267ec7105822ad680b5f043c569915fda",
   "fingerprinted_files": [
     {
-      "path": "src/agent_coach/data/diploma_eval_cases.json",
-      "sha256": "1a897512802d2c19a57e60307e8209528ebcf9d5a54afa17a81c55149f3aa57c",
+      "path": "README.md",
+      "sha256": "295eb56e194a1301bc57cb0472ad200ac16d4b314d53f912e1ab503ae04e0a79",
       "state": "MODIFY"
     },
     {
-      "path": "src/agent_coach/eval/gate.py",
-      "sha256": "9a6c56b830aeaaa3902099d3ace7664086d42ac55b77b6925654a9c0d6f227f1",
+      "path": "docs/eval_gate.md",
+      "sha256": "07ac98a4981b3113d8c3e93b108dc8160b9944ce706b38906a8c70bfb5a0bb7a",
       "state": "MODIFY"
     },
     {
-      "path": "tests/test_eval_gate.py",
-      "sha256": "385cf34888b8fd013062a4dae1eeb6a42032da23559bf8c83ce1d3f44457dd2d",
+      "path": "docs/implementation_plan.md",
+      "sha256": "b09ab555d3d130ac5c2196aeb25fcfaaeb8e523ed85293e92fc8c222b6b8d45a",
+      "state": "MODIFY"
+    },
+    {
+      "path": "scripts/check_public_release.py",
+      "sha256": "4bab572d97736758753f7a82f5451deb13743952dd808716334618c268b35314",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_public_release_gate.py",
+      "sha256": "f4636db27212f204b0934399e7afed916c867f78fed650b5c9a403032e5d38b4",
       "state": "MODIFY"
     }
   ],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T16:34:04Z",
+  "session_started_at_utc": "2026-08-25T16:38:02Z",
   "lease_status": "RELEASED",
-  "current_package": "D1",
+  "current_package": "D2",
   "implementation_status": "COMPLETE",
   "package_verdict": "PASS",
   "d11_promotion_status": "HOLD",
@@ -37,68 +47,83 @@
   "provider_cost_status": "zero",
   "changed_files": [
     {
-      "path": "src/agent_coach/data/diploma_eval_cases.json",
-      "purpose": "Promote frozen D11 eval suite to v2 with 47 public synthetic cases from D0 discovery.",
+      "path": "README.md",
+      "purpose": "Describe the eval v2 47-case public suite and published denominators.",
       "state": "MODIFY"
     },
     {
-      "path": "src/agent_coach/eval/gate.py",
-      "purpose": "Execute eval v2 case types and publish new offline denominators while preserving zero provider spend.",
+      "path": "docs/eval_gate.md",
+      "purpose": "Update eval-gate contract text for suite version two coverage and case count.",
       "state": "MODIFY"
     },
     {
-      "path": "tests/test_eval_gate.py",
-      "purpose": "Assert eval v2 suite locks, metrics and CLI behavior.",
+      "path": "docs/implementation_plan.md",
+      "purpose": "Record D1 promotion evidence and D2 promotion threshold wording.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "scripts/check_public_release.py",
+      "purpose": "Require release docs to advertise the 47-case eval suite.",
+      "state": "MODIFY"
+    },
+    {
+      "path": "tests/test_public_release_gate.py",
+      "purpose": "Lock release-gate documentation awareness for eval v2.",
       "state": "MODIFY"
     },
     {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package D1 READY_TO_COMMIT checkpoint and verification evidence.",
+      "purpose": "Record Package D2 READY_TO_COMMIT checkpoint and verification evidence.",
       "state": "MODIFY"
     }
   ],
   "checks_passed": [
     {
-      "id": "eval_v2_suite",
-      "command": "python -m pytest tests/test_eval_gate.py tests/eval_discovery/test_d11_eval_v2_discovery.py -p no:cacheprovider",
+      "id": "eval_gate_cli",
+      "command": "python -m pytest tests/test_eval_gate.py -p no:cacheprovider",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
-      "id": "offline_eval_gate",
-      "command": "python scripts/run_eval_gate.py",
+      "id": "public_release",
+      "command": "python scripts/check_public_release.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "release_gate_suite",
+      "command": "python -m pytest tests/test_public_release_gate.py -p no:cacheprovider",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
       "id": "ruff_touched_python",
-      "command": "python -m ruff check src/agent_coach/eval/gate.py tests/test_eval_gate.py tests/eval_discovery/test_d11_eval_v2_discovery.py",
+      "command": "python -m ruff check tests/test_public_release_gate.py",
       "platform": "win32/Windows",
       "result": "PASS"
     },
     {
       "id": "compileall_touched_python",
-      "command": "python -m compileall -q src/agent_coach/eval/gate.py tests/test_eval_gate.py tests/eval_discovery/test_d11_eval_v2_discovery.py",
+      "command": "python -m compileall -q tests/test_public_release_gate.py",
       "platform": "win32/Windows",
       "result": "PASS"
     }
   ],
   "checks_not_run": [
     "full_pytest_suite",
-    "public_release",
     "live_provider_eval",
     "fresh_clone_clean_release",
     "d11_promotion_gate"
   ],
   "remaining_risks": [
-    "D1 intentionally leaves README/docs/release awareness to Package D2 write-set.",
-    "Eval v2 provider-contract cases use scripted adapter responses only; no provider network was run.",
+    "D2 updates public documentation and release hygiene only; live provider evidence is still not run.",
+    "Strict final release mode still requires a clean worktree and E2 evidence artifacts.",
     "D11 promotion remains HOLD pending E2 live and clean-release evidence."
   ],
   "blockers": [],
-  "last_completed_package": "D1",
-  "next_allowed_package": "D2",
-  "exact_resume_instruction": "On clean HEAD after committing this D1 READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then implement Package D2 documentation and release-awareness updates for the 47-case eval v2 suite. Do not run provider network.",
+  "last_completed_package": "D2",
+  "next_allowed_package": "E1",
+  "exact_resume_instruction": "On clean HEAD after committing this D2 READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then implement Package E1 autonomous live harness evidence without running provider network by default.",
   "package_ledger": [
     {
       "package": "A",
@@ -330,6 +355,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "a58970a285cec011ddd1a30b95cf9be12460cd5817f907305ecaca62d3202861",
       "entry_sha256": "5b9110c31411f7f9f95592119eb441f9e2671fe444aa0b1a5cc0b163c5b5ac28"
+    },
+    {
+      "package": "D2",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "4b504da33739fb4aac19b1166f11ad733feb8653",
+      "completed_at_utc": "2026-08-25T16:38:02Z",
+      "evidence_summary": "Updated public docs and release checks for eval v2: 47 public synthetic cases, new metric denominators, and release-gate regression coverage.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "5b9110c31411f7f9f95592119eb441f9e2671fe444aa0b1a5cc0b163c5b5ac28",
+      "entry_sha256": "e199b9ed0ada205d1ebfa69c43535b19cfa3abd32618a85edcaf17cca3301053"
     }
   ]
 }

@@ -400,6 +400,18 @@ def test_d11_eval_artifact_check_reports_missing_tool_sop(tmp_path) -> None:
     assert "docs/tool_sop.md is missing or unreadable" in failures
 
 
+def test_public_release_gate_tracks_eval_v2_case_count_docs() -> None:
+    eval_gate = Path("docs/eval_gate.md").read_text(encoding="utf-8")
+    readme = Path("README.md").read_text(encoding="utf-8")
+    implementation_plan = Path("docs/implementation_plan.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "It contains 47 public synthetic" in eval_gate
+    assert "exactly 47 public synthetic cases" in readme
+    assert "exactly 47 registered frozen cases" in implementation_plan
+
+
 def test_final_release_checklist_documents_full_promotion_command() -> None:
     checklist = Path("docs/release_checklist.md").read_text(encoding="utf-8")
     command = _promotion_command_from_checklist(checklist)
@@ -456,7 +468,13 @@ def _write_required_files(root: Path) -> None:
         "# Dependencies\n",
         encoding="utf-8",
     )
-    (root / "docs" / "eval_gate.md").write_text("# Eval\n", encoding="utf-8")
+    eval_suite_path = "/".join(
+        ("src", "agent_coach", "data", "diploma_eval_cases.json")
+    )
+    (root / "docs" / "eval_gate.md").write_text(
+        f"`{eval_suite_path}`. It contains 47 public synthetic cases.\n",
+        encoding="utf-8",
+    )
     (root / "docs" / "tool_sop.md").write_text(
         gate.build_tool_sop_markdown(),
         encoding="utf-8",
