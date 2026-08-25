@@ -1,43 +1,17 @@
 {
   "schema_version": "agent-coach-d11-remediation-status/2.0.0",
-  "updated_at_utc": "2026-08-25T16:38:02Z",
+  "updated_at_utc": "2026-08-25T16:39:37Z",
   "autonomous_live_policy": "DOCUMENTED_LIMITATION",
-  "base_head": "4b504da33739fb4aac19b1166f11ad733feb8653",
-  "observed_head": "4b504da33739fb4aac19b1166f11ad733feb8653",
+  "base_head": "d0e91390b87eb8bb4eccdd44a139759cf4149205",
+  "observed_head": "d0e91390b87eb8bb4eccdd44a139759cf4149205",
   "observed_origin_main": "f045f0cb38b67515246d6e7e961df6ce3b7623ee",
   "resolved_completion_commit": null,
   "checkpoint_commit_state": "READY_TO_COMMIT",
-  "checkpoint_fingerprint_sha256": "3eac06220c829f4dfff376d8c41cab8267ec7105822ad680b5f043c569915fda",
-  "fingerprinted_files": [
-    {
-      "path": "README.md",
-      "sha256": "295eb56e194a1301bc57cb0472ad200ac16d4b314d53f912e1ab503ae04e0a79",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/eval_gate.md",
-      "sha256": "07ac98a4981b3113d8c3e93b108dc8160b9944ce706b38906a8c70bfb5a0bb7a",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/implementation_plan.md",
-      "sha256": "b09ab555d3d130ac5c2196aeb25fcfaaeb8e523ed85293e92fc8c222b6b8d45a",
-      "state": "MODIFY"
-    },
-    {
-      "path": "scripts/check_public_release.py",
-      "sha256": "4bab572d97736758753f7a82f5451deb13743952dd808716334618c268b35314",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_public_release_gate.py",
-      "sha256": "f4636db27212f204b0934399e7afed916c867f78fed650b5c9a403032e5d38b4",
-      "state": "MODIFY"
-    }
-  ],
+  "checkpoint_fingerprint_sha256": "c502fe4acb3bb928e5f69ab8a2e44470866927e7d8219c8a6e034fa4c6cb184a",
+  "fingerprinted_files": [],
   "worktree_state": "DIRTY_EXPECTED",
   "active_session_id": null,
-  "session_started_at_utc": "2026-08-25T16:38:02Z",
+  "session_started_at_utc": "2026-08-25T16:39:37Z",
   "lease_status": "RELEASED",
   "current_package": "D2",
   "implementation_status": "COMPLETE",
@@ -47,33 +21,8 @@
   "provider_cost_status": "zero",
   "changed_files": [
     {
-      "path": "README.md",
-      "purpose": "Describe the eval v2 47-case public suite and published denominators.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/eval_gate.md",
-      "purpose": "Update eval-gate contract text for suite version two coverage and case count.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "docs/implementation_plan.md",
-      "purpose": "Record D1 promotion evidence and D2 promotion threshold wording.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "scripts/check_public_release.py",
-      "purpose": "Require release docs to advertise the 47-case eval suite.",
-      "state": "MODIFY"
-    },
-    {
-      "path": "tests/test_public_release_gate.py",
-      "purpose": "Lock release-gate documentation awareness for eval v2.",
-      "state": "MODIFY"
-    },
-    {
       "path": "docs/d11_remediation_status.json",
-      "purpose": "Record Package D2 READY_TO_COMMIT checkpoint and verification evidence.",
+      "purpose": "Record Package D2 corrective READY_TO_COMMIT checkpoint after line-ending fingerprint normalization.",
       "state": "MODIFY"
     }
   ],
@@ -87,6 +36,12 @@
     {
       "id": "public_release",
       "command": "python scripts/check_public_release.py",
+      "platform": "win32/Windows",
+      "result": "PASS"
+    },
+    {
+      "id": "strict_public_release",
+      "command": "python scripts/check_public_release.py --release",
       "platform": "win32/Windows",
       "result": "PASS"
     },
@@ -117,13 +72,13 @@
   ],
   "remaining_risks": [
     "D2 updates public documentation and release hygiene only; live provider evidence is still not run.",
-    "Strict final release mode still requires a clean worktree and E2 evidence artifacts.",
+    "Strict final release mode passed on the clean D2 commit but final promotion still needs E2 evidence artifacts.",
     "D11 promotion remains HOLD pending E2 live and clean-release evidence."
   ],
   "blockers": [],
   "last_completed_package": "D2",
   "next_allowed_package": "E1",
-  "exact_resume_instruction": "On clean HEAD after committing this D2 READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then implement Package E1 autonomous live harness evidence without running provider network by default.",
+  "exact_resume_instruction": "On clean HEAD after committing this D2 corrective READY_TO_COMMIT checkpoint, verify scripts/check_d11_remediation_status.py, then implement Package E1 autonomous live harness evidence without running provider network by default.",
   "package_ledger": [
     {
       "package": "A",
@@ -366,6 +321,17 @@
       "autonomous_live_policy": "DOCUMENTED_LIMITATION",
       "previous_entry_sha256": "5b9110c31411f7f9f95592119eb441f9e2671fe444aa0b1a5cc0b163c5b5ac28",
       "entry_sha256": "e199b9ed0ada205d1ebfa69c43535b19cfa3abd32618a85edcaf17cca3301053"
+    },
+    {
+      "package": "D2",
+      "status": "COMPLETE",
+      "verdict": "PASS",
+      "observed_head": "d0e91390b87eb8bb4eccdd44a139759cf4149205",
+      "completed_at_utc": "2026-08-25T16:39:37Z",
+      "evidence_summary": "Corrected D2 status checkpoint after clean-head line-ending fingerprint normalization; eval v2 docs and release checks remain PASS.",
+      "autonomous_live_policy": "DOCUMENTED_LIMITATION",
+      "previous_entry_sha256": "e199b9ed0ada205d1ebfa69c43535b19cfa3abd32618a85edcaf17cca3301053",
+      "entry_sha256": "c8b0a8d86a0261186b944d1886422ca37eef19c66d7e01284fd35660da27fc36"
     }
   ]
 }
